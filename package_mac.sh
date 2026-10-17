@@ -50,7 +50,9 @@ make_component () {   # id  bundle  destino  nombre.pkg  [scripts]
     pkgbuild --analyze --root "$root" "$WORK/$id.plist" >/dev/null
     local i=0
     while /usr/libexec/PlistBuddy -c "Print :$i" "$WORK/$id.plist" >/dev/null 2>&1; do
-        /usr/libexec/PlistBuddy -c "Set :$i:BundleIsRelocatable false" "$WORK/$id.plist"
+        # (en macOS nuevos la clave puede no venir: entonces se agrega)
+        /usr/libexec/PlistBuddy -c "Set :$i:BundleIsRelocatable false" "$WORK/$id.plist" 2>/dev/null \
+            || /usr/libexec/PlistBuddy -c "Add :$i:BundleIsRelocatable bool false" "$WORK/$id.plist"
         i=$((i + 1))
     done
     if [ -n "$scripts" ]; then
