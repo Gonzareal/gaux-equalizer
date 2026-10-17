@@ -38,7 +38,7 @@ jobs:
       - name: Mostrar los errores de compilacion
         if: failure()
         run: |
-          msg=$(grep -E "error:|Error|FAILED" build.log | head -25 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
+          msg=$( (grep -E "error:|Error|ERROR|FAILED" build.log | head -20; echo "----- final del registro -----"; tail -n 30 build.log) | cut -c1-400 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
           echo "::error title=Errores de Mac::$msg"
 
       - name: Instalar el .pkg (como lo haria un usuario)
