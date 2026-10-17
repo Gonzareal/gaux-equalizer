@@ -31,7 +31,15 @@ jobs:
           ./dsptests
 
       - name: Compilar y crear el instalador
-        run: bash package_mac.sh
+        run: |
+          set -o pipefail
+          bash package_mac.sh 2>&1 | tee build.log
+
+      - name: Mostrar los errores de compilacion
+        if: failure()
+        run: |
+          msg=$(grep -E "error:|Error|FAILED" build.log | head -25 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
+          echo "::error title=Errores de Mac::$msg"
 
       - name: Instalar el .pkg (como lo haria un usuario)
         run: |
@@ -69,7 +77,17 @@ jobs:
 
       - name: Compilar y crear el instalador
         shell: pwsh
-        run: powershell -NoProfile -ExecutionPolicy Bypass -File package_windows.ps1
+        run: |
+          powershell -NoProfile -ExecutionPolicy Bypass -File package_windows.ps1 *>&1 | Tee-Object -FilePath build.log
+          if ($LASTEXITCODE) { exit 1 }
+
+      - name: Mostrar los errores de compilacion
+        if: failure()
+        shell: pwsh
+        run: |
+          $e = Select-String -Path build.log -Pattern ' error |error C|fatal error|Fallo|No se genero' | Select-Object -First 25 | ForEach-Object { $_.Line.Trim() }
+          $msg = ($e -join '%0A')
+          Write-Output "::error title=Errores de Windows::$msg"
 
       - name: Pruebas del motor de sonido (compilador de Windows)
         shell: pwsh
