@@ -4,7 +4,7 @@
 # muestra como aviso en GitHub para poder arreglarlo.
 PLUG="$1"; NAME="$2"; shift 2
 PV=pluginval.app/Contents/MacOS/pluginval
-"$PV" validate "$PLUG" "$@" > "pv_$NAME.log" 2>&1 &
+"$PV" "$@" --validate "$PLUG" > "pv_$NAME.log" 2>&1 &   # (sintaxis de pluginval 1.x, la que publica Tracktion)
 P=$!
 for i in $(seq 1 120); do sleep 5; kill -0 $P 2>/dev/null || break; done
 emit () { msg=$(cut -c1-300 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}'); echo "::error title=$1::$msg"; }
@@ -33,6 +33,7 @@ PY
     exit 1
 fi
 wait $P; rc=$?
+grep -q "SUCCESS" "pv_$NAME.log" || rc=1
 if [ $rc -ne 0 ]; then tail -n 40 "pv_$NAME.log" | emit "pluginval $NAME: fallo"; fi
 tail -n 3 "pv_$NAME.log"
 exit $rc

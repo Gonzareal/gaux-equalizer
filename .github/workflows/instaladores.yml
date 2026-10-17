@@ -111,8 +111,17 @@ jobs:
           Invoke-WebRequest -UseBasicParsing -Uri https://github.com/Tracktion/pluginval/releases/latest/download/pluginval_Windows.zip -OutFile pluginval.zip
           Expand-Archive pluginval.zip -DestinationPath pv
           $pv = (Get-ChildItem -Recurse -Filter pluginval.exe pv | Select-Object -First 1).FullName
-          & $pv validate "$env:CommonProgramFiles\VST3\Gaux Equalizer.vst3" --strictness-level 10 --repeat 2 --randomise --skip-gui-tests --timeout-ms 900000 --sample-rates 44100,48000,96000,192000 --block-sizes 16,64,256,1024,4096
-          if ($LASTEXITCODE) { exit 1 }
+          # (pluginval es una app con ventana: se espera a que termine y se revisa que diga SUCCESS)
+          $args = @('--strictness-level','10','--repeat','2','--randomise','--skip-gui-tests','--timeout-ms','900000',
+                    '--sample-rates','44100,48000,96000,192000','--block-sizes','16,64,256,1024,4096',
+                    '--validate', "`"$env:CommonProgramFiles\VST3\Gaux Equalizer.vst3`"")
+          $p = Start-Process -FilePath $pv -ArgumentList $args -Wait -PassThru -NoNewWindow -RedirectStandardOutput pv.log -RedirectStandardError pv_err.log
+          Get-Content pv.log -Tail 8
+          if ($p.ExitCode -ne 0 -or -not (Select-String -Path pv.log -Pattern 'SUCCESS' -Quiet)) {
+              $t = (Get-Content pv.log -Tail 40) -join '%0A'
+              Write-Output "::error title=pluginval Windows::$t"
+              exit 1
+          }
 
       - name: Desinstalar (comprobar que no deja restos)
         shell: pwsh
