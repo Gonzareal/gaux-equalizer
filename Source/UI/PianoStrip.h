@@ -18,6 +18,8 @@ public:
     }
 
     std::function<int()> getSelectedBand;
+    // Colores: true = blancas negras y negras rojas (el elegido); false = blancas rojas y negras negras
+    static inline bool inverted = true;
 
     static int noteOf (double f) { return (int) std::lround (69.0 + 12.0 * std::log2 (std::max (1.0, f) / 440.0)); }
     static double freqOfNote (int n) { return 440.0 * std::pow (2.0, (n - 69) / 12.0); }
@@ -43,9 +45,11 @@ public:
         g.fillAll (juce::Colour (0xff070405));
         const float top = b.getY() + 2.0f, h = b.getHeight() - 3.0f, blackH = h * 0.6f;
         const juce::Colour redTop (0xffd8283a), redBot (0xff8c1020), blackKey (0xff0b0708);
+        const juce::Colour whiteTop = inverted ? juce::Colour (0xff1e1417) : redTop, whiteBot = inverted ? juce::Colour (0xff0d0809) : redBot;
+        const juce::Colour seam = inverted ? juce::Colour (0xff4a1420) : juce::Colour (0xff3a0810);
 
-        // teclas blancas: una franja roja con degradado (como teclas iluminadas desde arriba)
-        g.setGradientFill (juce::ColourGradient (redTop, 0.0f, top, redBot, 0.0f, top + h, false));
+        // teclas blancas: una franja con degradado (como teclas iluminadas desde arriba)
+        g.setGradientFill (juce::ColourGradient (whiteTop, 0.0f, top, whiteBot, 0.0f, top + h, false));
         g.fillRect (juce::Rectangle<float> (b.getX(), top, b.getWidth(), h));
         g.setColour (juce::Colours::white.withAlpha (0.10f));
         g.fillRect (juce::Rectangle<float> (b.getX(), top, b.getWidth(), 1.0f));
@@ -67,7 +71,7 @@ public:
                 }
                 // separacion entre dos blancas seguidas (E-F y B-C)
                 const int pc = ((n % 12) + 12) % 12;
-                if (pc == 4 || pc == 11) { g.setColour (juce::Colour (0xff3a0810)); g.fillRect (juce::Rectangle<float> (x1 - 0.5f, top, 1.0f, h)); }
+                if (pc == 4 || pc == 11) { g.setColour (seam); g.fillRect (juce::Rectangle<float> (x1 - 0.5f, top, 1.0f, h)); }
             }
         }
         for (int n = kLow; n <= kHigh; ++n)
@@ -77,11 +81,14 @@ public:
             if (r.getEnd() < b.getX() || r.getStart() > b.getRight()) continue;
             const float x0 = r.getStart(), x1 = r.getEnd(), xc = (x0 + x1) * 0.5f;
             // el borde entre las dos blancas queda debajo de la negra
-            g.setColour (juce::Colour (0xff3a0810));
+            g.setColour (seam);
             g.fillRect (juce::Rectangle<float> (xc - 0.5f, top + blackH, 1.0f, h - blackH));
             const bool sel = n == bandNote, peak = std::find (peakNotes.begin(), peakNotes.end(), n) != peakNotes.end(), hov = n == hoverNote;
             auto key = juce::Rectangle<float> (x0 + 0.5f, top, juce::jmax (1.0f, x1 - x0 - 1.0f), blackH);
-            g.setColour (sel ? bandColour : peak ? juce::Colour (0xfffff0e8) : hov ? juce::Colour (0xff3a2a2e) : blackKey);
+            if (sel || peak || hov || ! inverted)
+                g.setColour (sel ? bandColour : peak ? juce::Colour (0xfffff0e8) : hov ? juce::Colour (inverted ? 0xffff5a6a : 0xff3a2a2e) : blackKey);
+            else
+                g.setGradientFill (juce::ColourGradient (redTop, 0.0f, key.getY(), redBot, 0.0f, key.getBottom(), false));
             g.fillRoundedRectangle (key.withTrimmedTop (-2.0f), 1.5f);
             if (! sel && ! peak)
             {
@@ -89,6 +96,27 @@ public:
                 g.fillRect (key.withHeight (1.0f).translated (0, 0.5f));
             }
         }
+        // La nota de la banda elegida: resplandor de su color + borde blanco y una marca arriba, para que se
+        // distinga de las teclas rojas
+        if (bandNote >= kLow && bandNote <= kHigh)
+        {
+            const auto r = keyRange (bandNote);
+            const bool blk = isBlack (bandNote);
+            auto key = juce::Rectangle<float> (r.getStart() + 0.5f, top, juce::jmax (2.0f, r.getLength() - 1.0f), blk ? blackH : h);
+            for (int i = 3; i >= 1; --i)
+            {
+                g.setColour (bandColour.withAlpha (0.16f * (4 - i)));
+                g.fillRoundedRectangle (key.expanded ((float) i * 1.6f, 0.0f).withY (top - 1.0f).withHeight (h + 1.0f), 2.5f);
+            }
+            g.setColour (bandColour.brighter (0.25f));
+            g.fillRoundedRectangle (key, 1.5f);
+            g.setColour (juce::Colours::white.withAlpha (0.95f));
+            g.drawRoundedRectangle (key.expanded (0.5f), 1.5f, 1.2f);
+            juce::Path t; const float cx = key.getCentreX();
+            t.addTriangle (cx - 3.5f, b.getY(), cx + 3.5f, b.getY(), cx, b.getY() + 3.5f);
+            g.fillPath (t);
+        }
+
         // C1 ... C9 (en la parte de abajo de cada Do)
         g.setFont (monoFont (7.5f));
         for (int n = kLow; n <= kHigh; ++n)
@@ -96,7 +124,7 @@ public:
             if (((n % 12) + 12) % 12 != 0) continue;
             const auto r = keyRange (n);
             if (r.getStart() < b.getX() - 2 || r.getEnd() > b.getRight()) continue;
-            g.setColour (n == bandNote ? juce::Colours::black : juce::Colours::white.withAlpha (0.85f));
+            g.setColour (n == bandNote ? juce::Colours::black : inverted ? juce::Colour (0xffff6b78).withAlpha (0.9f) : juce::Colours::white.withAlpha (0.85f));
             g.drawText (noteName (n), juce::Rectangle<float> (r.getStart() + 1.0f, top + blackH, 24.0f, h - blackH), juce::Justification::centredLeft);
         }
         // linea de luz arriba (une el teclado con el panel)
