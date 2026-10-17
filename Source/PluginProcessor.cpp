@@ -1,5 +1,6 @@
 // Gaux Equalizer - Procesador de audio
 #include "PluginProcessor.h"
+#include <map>
 #include "PluginEditor.h"
 
 GauxEqProcessor::GauxEqProcessor()
@@ -962,7 +963,15 @@ void GauxEqProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
 
 void GauxEqProcessor::getStateInformation (juce::MemoryBlock& destData)
 {
-    if (auto xml = apvts.copyState().createXml())
+    auto state = apvts.copyState();
+    // Interruptores y selectores: el DAW puede haberlos dejado en un valor intermedio (p. ej. 0.88 en un selector
+    // de 2 opciones). Se guarda ese valor exacto para devolverle al DAW lo mismo al abrir la sesion.
+    juce::String norms;
+    for (auto* prm : getParameters())
+        if (auto* rp = dynamic_cast<juce::RangedAudioParameter*> (prm); rp != nullptr && rp->isDiscrete())
+            norms << rp->getParameterID() << "=" << juce::String (rp->getValue(), 6) << ";";
+    state.setProperty ("hostNorm", norms, nullptr);
+    if (auto xml = state.createXml())
         copyXmlToBinary (*xml, destData);
 }
 
@@ -978,12 +987,20 @@ void GauxEqProcessor::setStateInformation (const void* data, int sizeInBytes)
             // Interruptores y selectores: si el DAW los habia dejado en un valor intermedio (p. ej. 0.44),
             // replaceState no los toca porque el valor redondeado no cambio. Se dejan en el valor exacto de
             // la sesion para que el DAW lea siempre lo mismo al abrirla (sin avisarle: no es una edicion)
+            std::map<juce::String, float> hostNorm;
+            for (auto& kv : juce::StringArray::fromTokens (apvts.state.getProperty ("hostNorm").toString(), ";", ""))
+                if (kv.contains ("=")) hostNorm[kv.upToFirstOccurrenceOf ("=", false, false)] = kv.fromFirstOccurrenceOf ("=", false, false).getFloatValue();
+            apvts.state.removeProperty ("hostNorm", nullptr);
             for (auto* prm : getParameters())
                 if (auto* rp = dynamic_cast<juce::RangedAudioParameter*> (prm); rp != nullptr && rp->isDiscrete())
                     if (auto* raw = apvts.getRawParameterValue (rp->getParameterID()))
                     {
-                        const float snapped = rp->convertTo0to1 (raw->load());
-                        if (std::abs (rp->getValue() - snapped) > 1.0e-6f) rp->setValue (snapped);
+                        float target = rp->convertTo0to1 (raw->load());
+                        // el valor exacto que tenia el DAW, si corresponde a la misma opcion
+                        if (auto it = hostNorm.find (rp->getParameterID()); it != hostNorm.end()
+                            && std::abs (rp->convertFrom0to1 (juce::jlimit (0.0f, 1.0f, it->second)) - raw->load()) < 1.0e-4f)
+                            target = juce::jlimit (0.0f, 1.0f, it->second);
+                        if (std::abs (rp->getValue() - target) > 1.0e-6f) rp->setValue (target);
                     }
         }
 }
