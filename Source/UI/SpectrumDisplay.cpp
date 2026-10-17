@@ -108,6 +108,7 @@ SpectrumDisplay::ViewOpts SpectrumDisplay::viewOptions() const
     o.freeze = (bool) st.getProperty ("anFreeze", false);
     o.pre = (bool) st.getProperty ("anPre", true);
     o.piano = (bool) st.getProperty ("piano", true);   // (teclado de abajo, en la ventana)
+    o.bandCurves = (bool) st.getProperty ("bandCurves", true);
     return o;
 }
 
@@ -123,7 +124,7 @@ void SpectrumDisplay::advanceFrame (float dt)
     {
         // opciones de la pantalla (pueden cambiar al cargar una sesion)
         const auto o = viewOptions();
-        const bool changed = o.speed != opts.speed || o.tilt != opts.tilt || o.range != opts.range || o.freeze != opts.freeze || o.pre != opts.pre || o.piano != opts.piano;
+        const bool changed = o.speed != opts.speed || o.tilt != opts.tilt || o.range != opts.range || o.freeze != opts.freeze || o.pre != opts.pre || o.piano != opts.piano || o.bandCurves != opts.bandCurves;
         opts = o;
         if (! vintageMode && dbRange != kRanges[opts.range]) dbRange = kRanges[opts.range];
         if (optsTilt != kTilts[opts.tilt]) { optsTilt = kTilts[opts.tilt]; tiltFs = 0; }
@@ -639,6 +640,31 @@ void SpectrumDisplay::paint (juce::Graphics& g)
 
     // Area de la banda enfocada
     const int focus = dragBand >= 0 ? dragBand : (hoverBand >= 0 ? hoverBand : selectedBand);
+
+    // Cada banda deja su huella en su color (aunque no este elegida): relleno muy suave hasta 0 dB y una linea fina
+    if (opts.bandCurves && ! vintageMode)
+    {
+        const float y0 = dbToY (0);
+        for (int b = 0; b < kNumBands; ++b)
+        {
+            if (b == focus || ! bs[(size_t) b].on) continue;
+            if (soloing >= 0 && soloing != b) continue;
+            const auto col = colourOf (b);
+            const auto v = liveVersion (b) ^ ((juce::int64) juce::roundToInt (a.getWidth() * 8 + a.getHeight()) << 40);
+            std::vector<juce::Point<float>> bp;
+            auto build = [&] { if (bp.empty()) pathFromDb (liveDb (b), bp); };
+            const auto np = nodePosition (b);
+            g.setGradientFill (juce::ColourGradient (col.withAlpha (0.20f), np.x, np.y, col.withAlpha (0.03f), np.x, y0, false));
+            g.fillPath (bandFill[(size_t) b].get (v, [&] (juce::Path& fill)
+            {
+                build();
+                fill = linePath (bp);
+                fill.lineTo (a.getRight(), y0); fill.lineTo (a.getX(), y0); fill.closeSubPath();
+            }));
+            g.setColour (col.brighter (0.2f).withAlpha (0.80f));
+            g.fillPath (bandLine[(size_t) b].get (v, [&] (juce::Path& out) { build(); juce::PathStrokeType (1.4f).createStrokedPath (out, linePath (bp)); }));
+        }
+    }
     if (focus >= 0 && bs[(size_t) focus].on)
     {
         const auto col = colourOf (focus);
@@ -1215,6 +1241,7 @@ void SpectrumDisplay::mouseDown (const juce::MouseEvent& e)
             m.addSubMenu ("Analizador", an);
             m.addSubMenu ("Rango de la pantalla", rg);
             m.addItem (50, "Teclado de piano abajo (notas)", true, o.piano);
+            m.addItem (51, "Curva de cada banda en su color", true, o.bandCurves);
             m.addSeparator();
             m.addItem (2, "SKETCH: dibujar la curva con el mouse", true, sketchMode);
             m.addItem (60, "Copiar la curva (todas las bandas)");
@@ -1236,6 +1263,7 @@ void SpectrumDisplay::mouseDown (const juce::MouseEvent& e)
                                  if (r == 31) safe->setViewOption ("anFreeze", o2.freeze ? 0 : 1);
                                  if (r >= 40 && r <= 43) safe->setViewOption ("dispRange", r - 40);
                                  if (r == 50) safe->setViewOption ("piano", o2.piano ? 0 : 1);
+                                 if (r == 51) safe->setViewOption ("bandCurves", o2.bandCurves ? 0 : 1);
                                  if (r == 60) juce::SystemClipboard::copyTextToClipboard (safe->proc.curveToText());
                                  if (r == 61) { safe->proc.curveFromText (juce::SystemClipboard::getTextFromClipboard()); safe->repaint(); }
                                  if (r == 62) safe->selectAll();

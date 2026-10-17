@@ -45,7 +45,7 @@ public:
     bool keyPressed (const juce::KeyPress&) override;
 
     // Opciones de la pantalla (clic derecho en la pantalla vacia; se guardan con la sesion)
-    struct ViewOpts { int speed = 1, tilt = 2, range = 2; bool freeze = false, pre = true, piano = false; };
+    struct ViewOpts { int speed = 1, tilt = 2, range = 2; bool freeze = false, pre = true, piano = false, bandCurves = true; };
     ViewOpts viewOptions() const;
     void setViewOption (const char* key, int value);
     static constexpr double kRanges[4] = { 6.0, 12.0, 24.0, 36.0 };
@@ -161,6 +161,7 @@ private:
     double curvesDbRange = 0;
     StrokeCache totalGlowWide, totalGlow, totalLine, focusFill, focusLine;
     std::array<std::array<StrokeCache, 5>, kNumBands> dynStrokes;
+    std::array<StrokeCache, kNumBands> bandFill, bandLine;   // curva de cada banda siempre visible en su color
     VintageSettings vintageCached; bool vintageValid = false;
     std::vector<float> vintageDb;
     juce::int64 lastSignature = 0;
