@@ -146,27 +146,49 @@ inline juce::AudioParameterFloatAttributes decimalsAttr (int decimals, const juc
         .withValueFromStringFunction ([] (const juce::String& t) { return t.getFloatValue(); });
 }
 
+// Selectores e interruptores que recuerdan el valor EXACTO que les manda el DAW (p. ej. 0.73 en un selector de
+// 2 opciones), aunque el sonido use la opcion redondeada. Asi el DAW (y pluginval) lee siempre lo mismo que
+// escribio, tambien al guardar y abrir la sesion. El valor redondeado (el que usa el audio) lo guarda el APVTS.
+struct GauxChoiceParameter : public juce::AudioParameterChoice
+{
+    template <typename... Args>
+    explicit GauxChoiceParameter (Args&&... args) : juce::AudioParameterChoice (std::forward<Args> (args)...)
+    { raw.store (convertTo0to1 ((float) getIndex())); }
+    float getValue() const override { return raw.load(); }
+    void setValue (float v) override { raw.store (juce::jlimit (0.0f, 1.0f, v)); }
+    std::atomic<float> raw { 0.0f };
+};
+struct GauxBoolParameter : public juce::AudioParameterBool
+{
+    template <typename... Args>
+    explicit GauxBoolParameter (Args&&... args) : juce::AudioParameterBool (std::forward<Args> (args)...)
+    { raw.store (get() ? 1.0f : 0.0f); }
+    float getValue() const override { return raw.load(); }
+    void setValue (float v) override { raw.store (juce::jlimit (0.0f, 1.0f, v)); }
+    std::atomic<float> raw { 0.0f };
+};
+
 inline juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
 {
     using namespace juce;
     AudioProcessorValueTreeState::ParameterLayout layout;
     int version = 1;
 
-    layout.add (std::make_unique<AudioParameterChoice> (ParameterID { ParamID::mode, version }, "Modo",
+    layout.add (std::make_unique<GauxChoiceParameter> (ParameterID { ParamID::mode, version }, "Modo",
                                                         StringArray { "Parametrico", "Vintage" }, 0));
     layout.add (std::make_unique<AudioParameterFloat> (ParameterID { ParamID::output, version }, "Output",
                                                        NormalisableRange<float> (-24.0f, 24.0f, 0.01f), 0.0f, dbAttr()));
-    layout.add (std::make_unique<AudioParameterChoice> (ParameterID { ParamID::quality, version }, "Calidad (HQ)",
+    layout.add (std::make_unique<GauxChoiceParameter> (ParameterID { ParamID::quality, version }, "Calidad (HQ)",
                                                         StringArray { "Normal", "HQ 2x", "HQ 4x" }, 0));
-    layout.add (std::make_unique<AudioParameterBool> (ParameterID { ParamID::analyzer, version }, "Analizador", true));
-    layout.add (std::make_unique<AudioParameterChoice> (ParameterID { ParamID::phase, version }, "Fase",
+    layout.add (std::make_unique<GauxBoolParameter> (ParameterID { ParamID::analyzer, version }, "Analizador", true));
+    layout.add (std::make_unique<GauxChoiceParameter> (ParameterID { ParamID::phase, version }, "Fase",
                                                         StringArray { "Minima (0 latencia)", "Lineal", "Lineal HQ", "Natural" }, 0));
-    layout.add (std::make_unique<AudioParameterBool> (ParameterID { ParamID::bypass, version }, "Bypass", false));
-    layout.add (std::make_unique<AudioParameterBool> (ParameterID { ParamID::autoGain, version }, "Auto Gain", false));
+    layout.add (std::make_unique<GauxBoolParameter> (ParameterID { ParamID::bypass, version }, "Bypass", false));
+    layout.add (std::make_unique<GauxBoolParameter> (ParameterID { ParamID::autoGain, version }, "Auto Gain", false));
     layout.add (std::make_unique<AudioParameterFloat> (ParameterID { ParamID::gainScale, version }, "Gain Scale",
                                                        NormalisableRange<float> (0.0f, 200.0f, 0.1f), 100.0f, decimalsAttr (0, " %")));
-    layout.add (std::make_unique<AudioParameterBool> (ParameterID { ParamID::rangeOn, version }, "Rango de proceso", false));
-    layout.add (std::make_unique<AudioParameterBool> (ParameterID { ParamID::scOn, version }, "Sidechain General", false));
+    layout.add (std::make_unique<GauxBoolParameter> (ParameterID { ParamID::rangeOn, version }, "Rango de proceso", false));
+    layout.add (std::make_unique<GauxBoolParameter> (ParameterID { ParamID::scOn, version }, "Sidechain General", false));
     layout.add (std::make_unique<AudioParameterFloat> (ParameterID { ParamID::scDuck, version }, "Sidechain Duck",
                                                        NormalisableRange<float> (0.0f, 100.0f, 0.1f), 60.0f, decimalsAttr (0, " %")));
     layout.add (std::make_unique<AudioParameterFloat> (ParameterID { ParamID::scThr, version }, "Sidechain Threshold",
@@ -184,8 +206,8 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout
         const String n = "Banda " + String (b + 1) + " ";
         auto group = std::make_unique<AudioProcessorParameterGroup> ("band" + String (b + 1), n.trim(), "|");
 
-        group->addChild (std::make_unique<AudioParameterBool> (ParameterID { ParamID::band (b, "on"), version }, n + "On", false));
-        group->addChild (std::make_unique<AudioParameterChoice> (ParameterID { ParamID::band (b, "type"), version }, n + "Tipo",
+        group->addChild (std::make_unique<GauxBoolParameter> (ParameterID { ParamID::band (b, "on"), version }, n + "On", false));
+        group->addChild (std::make_unique<GauxChoiceParameter> (ParameterID { ParamID::band (b, "type"), version }, n + "Tipo",
                                                                  toStringArray (kBandTypeNames, kNumBandTypes), defaultType (b)));
         group->addChild (std::make_unique<AudioParameterFloat> (ParameterID { ParamID::band (b, "freq"), version }, n + "Freq",
                                                                 freqRange(), (float) defaultFreq (b), freqAttr()));
@@ -195,17 +217,17 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout
         qRange.setSkewForCentre (1.0f);
         group->addChild (std::make_unique<AudioParameterFloat> (ParameterID { ParamID::band (b, "q"), version }, n + "Q",
                                                                 qRange, 0.707f, decimalsAttr (2)));
-        group->addChild (std::make_unique<AudioParameterChoice> (ParameterID { ParamID::band (b, "slope"), version }, n + "Pendiente",
+        group->addChild (std::make_unique<GauxChoiceParameter> (ParameterID { ParamID::band (b, "slope"), version }, n + "Pendiente",
                                                                  toStringArray (kSlopeNames, kNumSlopes), 1));
-        group->addChild (std::make_unique<AudioParameterChoice> (ParameterID { ParamID::band (b, "satType"), version }, n + "Sat Tipo",
+        group->addChild (std::make_unique<GauxChoiceParameter> (ParameterID { ParamID::band (b, "satType"), version }, n + "Sat Tipo",
                                                                  toStringArray (kSatTypeNames, kNumSatTypes), 0));
         group->addChild (std::make_unique<AudioParameterFloat> (ParameterID { ParamID::band (b, "drive"), version }, n + "Sat Drive",
                                                                 NormalisableRange<float> (0.0f, 36.0f, 0.01f), 0.0f, decimalsAttr (1, " dB")));
         group->addChild (std::make_unique<AudioParameterFloat> (ParameterID { ParamID::band (b, "mix"), version }, n + "Sat Mix",
                                                                 NormalisableRange<float> (0.0f, 100.0f, 0.1f), 100.0f, decimalsAttr (0, " %")));
-        group->addChild (std::make_unique<AudioParameterChoice> (ParameterID { ParamID::band (b, "stereo"), version }, n + "Canal",
+        group->addChild (std::make_unique<GauxChoiceParameter> (ParameterID { ParamID::band (b, "stereo"), version }, n + "Canal",
                                                                  toStringArray (kStereoNames, kNumStereoModes), 0));
-        group->addChild (std::make_unique<AudioParameterBool> (ParameterID { ParamID::band (b, "dyn"), version }, n + "Dinamica", false));
+        group->addChild (std::make_unique<GauxBoolParameter> (ParameterID { ParamID::band (b, "dyn"), version }, n + "Dinamica", false));
         group->addChild (std::make_unique<AudioParameterFloat> (ParameterID { ParamID::band (b, "thr"), version }, n + "Threshold",
                                                                 NormalisableRange<float> (-60.0f, 0.0f, 0.1f), -24.0f, decimalsAttr (1, " dB")));
         group->addChild (std::make_unique<AudioParameterFloat> (ParameterID { ParamID::band (b, "range"), version }, n + "Range",
@@ -216,46 +238,46 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout
                                                                 atk, 10.0f, decimalsAttr (1, " ms")));
         group->addChild (std::make_unique<AudioParameterFloat> (ParameterID { ParamID::band (b, "rel"), version }, n + "Release",
                                                                 rel, 120.0f, decimalsAttr (0, " ms")));
-        group->addChild (std::make_unique<AudioParameterBool> (ParameterID { ParamID::band (b, "autoThr"), version }, n + "Threshold Auto", false));
-        group->addChild (std::make_unique<AudioParameterBool> (ParameterID { ParamID::band (b, "ext"), version }, n + "Sidechain Externo", false));
+        group->addChild (std::make_unique<GauxBoolParameter> (ParameterID { ParamID::band (b, "autoThr"), version }, n + "Threshold Auto", false));
+        group->addChild (std::make_unique<GauxBoolParameter> (ParameterID { ParamID::band (b, "ext"), version }, n + "Sidechain Externo", false));
         layout.add (std::move (group));
     };
     for (int b = 0; b < kLegacyBands; ++b) addBand (b);
 
     auto knob = [] (float max) { return NormalisableRange<float> (0.0f, max, 0.01f); };
     auto vg = std::make_unique<AudioProcessorParameterGroup> ("vintage", "Vintage", "|");
-    vg->addChild (std::make_unique<AudioParameterChoice> (ParameterID { ParamID::vLowFreq, version }, "V Low Freq",
+    vg->addChild (std::make_unique<GauxChoiceParameter> (ParameterID { ParamID::vLowFreq, version }, "V Low Freq",
                                                           toStringArray (kVLowFreqNames, kNumVLowFreqs), 2));
     vg->addChild (std::make_unique<AudioParameterFloat> (ParameterID { ParamID::vLowBoost, version }, "V Low Boost", knob (10), 0.0f, decimalsAttr (1)));
     vg->addChild (std::make_unique<AudioParameterFloat> (ParameterID { ParamID::vLowAtten, version }, "V Low Atten", knob (10), 0.0f, decimalsAttr (1)));
-    vg->addChild (std::make_unique<AudioParameterChoice> (ParameterID { ParamID::vHighFreq, version }, "V High Freq",
+    vg->addChild (std::make_unique<GauxChoiceParameter> (ParameterID { ParamID::vHighFreq, version }, "V High Freq",
                                                           toStringArray (kVHighFreqNames, kNumVHighFreqs), 4));
     vg->addChild (std::make_unique<AudioParameterFloat> (ParameterID { ParamID::vHighBoost, version }, "V High Boost", knob (10), 0.0f, decimalsAttr (1)));
     vg->addChild (std::make_unique<AudioParameterFloat> (ParameterID { ParamID::vHighBw, version }, "V Bandwidth", knob (10), 5.0f, decimalsAttr (1)));
-    vg->addChild (std::make_unique<AudioParameterChoice> (ParameterID { ParamID::vAttenFreq, version }, "V Atten Freq",
+    vg->addChild (std::make_unique<GauxChoiceParameter> (ParameterID { ParamID::vAttenFreq, version }, "V Atten Freq",
                                                           toStringArray (kVAttenFreqNames, kNumVAttenFreqs), 1));
     vg->addChild (std::make_unique<AudioParameterFloat> (ParameterID { ParamID::vHighAtten, version }, "V High Atten", knob (10), 0.0f, decimalsAttr (1)));
-    vg->addChild (std::make_unique<AudioParameterChoice> (ParameterID { ParamID::vAirFreq, version }, "V Air Freq",
+    vg->addChild (std::make_unique<GauxChoiceParameter> (ParameterID { ParamID::vAirFreq, version }, "V Air Freq",
                                                           toStringArray (kVAirFreqNames, kNumVAirFreqs), 3));
     vg->addChild (std::make_unique<AudioParameterFloat> (ParameterID { ParamID::vAirGain, version }, "V Air", knob (10), 0.0f, decimalsAttr (1, " dB")));
     vg->addChild (std::make_unique<AudioParameterFloat> (ParameterID { ParamID::vTube, version }, "V Tube", knob (100), 0.0f, decimalsAttr (0, " %")));
-    vg->addChild (std::make_unique<AudioParameterChoice> (ParameterID { ParamID::vLmFreq, version }, "V Mid Low Freq",
+    vg->addChild (std::make_unique<GauxChoiceParameter> (ParameterID { ParamID::vLmFreq, version }, "V Mid Low Freq",
                                                           toStringArray (kVLmFreqNames, kNumVLmFreqs), 1));
     vg->addChild (std::make_unique<AudioParameterFloat> (ParameterID { ParamID::vLmBoost, version }, "V Mid Low Peak", knob (10), 0.0f, decimalsAttr (1)));
-    vg->addChild (std::make_unique<AudioParameterChoice> (ParameterID { ParamID::vDipFreq, version }, "V Dip Freq",
+    vg->addChild (std::make_unique<GauxChoiceParameter> (ParameterID { ParamID::vDipFreq, version }, "V Dip Freq",
                                                           toStringArray (kVDipFreqNames, kNumVDipFreqs), 4));
     vg->addChild (std::make_unique<AudioParameterFloat> (ParameterID { ParamID::vDip, version }, "V Dip", knob (10), 0.0f, decimalsAttr (1)));
-    vg->addChild (std::make_unique<AudioParameterChoice> (ParameterID { ParamID::vHmFreq, version }, "V Mid High Freq",
+    vg->addChild (std::make_unique<GauxChoiceParameter> (ParameterID { ParamID::vHmFreq, version }, "V Mid High Freq",
                                                           toStringArray (kVHmFreqNames, kNumVHmFreqs), 2));
     vg->addChild (std::make_unique<AudioParameterFloat> (ParameterID { ParamID::vHmBoost, version }, "V Mid High Peak", knob (10), 0.0f, decimalsAttr (1)));
-    vg->addChild (std::make_unique<AudioParameterChoice> (ParameterID { ParamID::vLowCut, version }, "V Low Cut",
+    vg->addChild (std::make_unique<GauxChoiceParameter> (ParameterID { ParamID::vLowCut, version }, "V Low Cut",
                                                           toStringArray (kVLowCutNames, kNumVLowCuts), 0));
-    vg->addChild (std::make_unique<AudioParameterChoice> (ParameterID { ParamID::vHighCut, version }, "V High Cut",
+    vg->addChild (std::make_unique<GauxChoiceParameter> (ParameterID { ParamID::vHighCut, version }, "V High Cut",
                                                           toStringArray (kVHighCutNames, kNumVHighCuts), kNumVHighCuts - 1));
     vg->addChild (std::make_unique<AudioParameterFloat> (ParameterID { ParamID::vIron, version }, "V Iron", knob (100), 0.0f, decimalsAttr (0, " %")));
-    vg->addChild (std::make_unique<AudioParameterBool> (ParameterID { ParamID::vProgramIn, version }, "V Program In", true));
-    vg->addChild (std::make_unique<AudioParameterBool> (ParameterID { ParamID::vMidIn, version }, "V Mid In", true));
-    vg->addChild (std::make_unique<AudioParameterBool> (ParameterID { ParamID::vFilterIn, version }, "V Filter In", true));
+    vg->addChild (std::make_unique<GauxBoolParameter> (ParameterID { ParamID::vProgramIn, version }, "V Program In", true));
+    vg->addChild (std::make_unique<GauxBoolParameter> (ParameterID { ParamID::vMidIn, version }, "V Mid In", true));
+    vg->addChild (std::make_unique<GauxBoolParameter> (ParameterID { ParamID::vFilterIn, version }, "V Filter In", true));
     layout.add (std::move (vg));
 
     // Bandas 17 a 24: al final de la lista (el orden de los parametros de siempre no cambia)
@@ -265,7 +287,7 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout
     {
         auto sg = std::make_unique<AudioProcessorParameterGroup> ("spectral", "Spectral", "|");
         for (int b = 0; b < kNumBands; ++b)
-            sg->addChild (std::make_unique<AudioParameterBool> (ParameterID { ParamID::band (b, "spec"), version },
+            sg->addChild (std::make_unique<GauxBoolParameter> (ParameterID { ParamID::band (b, "spec"), version },
                                                                 "Banda " + String (b + 1) + " Spectral", false));
         layout.add (std::move (sg));
     }

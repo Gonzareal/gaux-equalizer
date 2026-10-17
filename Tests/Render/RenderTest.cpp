@@ -495,7 +495,8 @@ int main (int argc, char** argv)
             {
                 for (int i = 0; i < 512; ++i) { blk.setSample (0, i, pinkSrc[(size_t) (pos + i)]); blk.setSample (1, i, pinkSrc[(size_t) (pos + i)]); }
                 pm.processBlock (blk, midi);
-                if ((pos / 512) % 8 == 0) juce::MessageManager::getInstance()->runDispatchLoopUntil (2);
+                // (al ritmo justo para que el panel recoja todo, como pasa en tiempo real)
+                if ((pos / 512) % 4 == 0) juce::MessageManager::getInstance()->runDispatchLoopUntil (6);
             }
             for (int i = 0; i < 100 && ! pm.match.referenceReady(); ++i) juce::MessageManager::getInstance()->runDispatchLoopUntil (50);
             juce::MessageManager::getInstance()->runDispatchLoopUntil (200);
