@@ -1,0 +1,79 @@
+﻿==============================================================
+  GAUX EQUALIZER  -  LEE ESTO ANTES DE INSTALAR (Windows)
+==============================================================
+
+Gracias por probar Gaux Equalizer, un EQ gratuito hecho por
+Aleksander Gaux para productores.
+
+--------------------------------------------------------------
+ IMPORTANTE: VAS A VER UNA ALERTA DE WINDOWS (ES NORMAL)
+--------------------------------------------------------------
+Firmar un programa para Windows cuesta cientos de dólares al año.
+Este plugin es gratuito y no está firmado, así que al abrir el
+instalador Windows mostrará una pantalla azul:
+
+   "Windows protegió su PC"
+
+No es un virus: es solo que el instalador no tiene firma paga.
+Para continuar:  pulsa "Más información" > "Ejecutar de todas formas".
+
+Otras alertas que pueden salir (todas normales):
+- El navegador dice que el archivo "no se descarga habitualmente":
+  elige "Conservar".
+- Algún antivirus puede desconfiar de un programa sin firma. Si lo
+  pone en cuarentena, restáuralo o agrégalo a las excepciones.
+
+--------------------------------------------------------------
+ PASOS
+--------------------------------------------------------------
+1. Descomprime el zip: clic derecho > "Extraer todo..."
+   (no abras el instalador desde dentro del zip).
+
+2. Doble clic en "GauxEqualizer_..._Windows_Setup.exe".
+   Sale "Windows protegió su PC" -> "Más información" ->
+   "Ejecutar de todas formas". Acepta el permiso de administrador.
+
+3. Siguiente > Siguiente > Instalar.
+
+4. Abre tu DAW y vuelve a escanear los plugins:
+   - Ableton Live: Opciones > Preferencias > Plug-ins > activa
+     "Usar carpeta de sistema VST3" > "Volver a escanear".
+   - FL Studio: Opciones > Administrar plugins > Buscar plugins.
+   - Cubase / Studio One / Reaper / Bitwig: lo detectan solos al
+     abrir (o con "reescanear").
+   Busca "Gaux Equalizer".
+
+--------------------------------------------------------------
+ SIN INSTALADOR (PORTABLE)
+--------------------------------------------------------------
+Si prefieres no usar el instalador: copia la carpeta
+"Gaux Equalizer.vst3" que está en "Portable (sin instalador)" dentro
+de  C:\Program Files\Common Files\VST3
+(o en la carpeta de plugins VST3 que use tu DAW) y reescanea.
+
+--------------------------------------------------------------
+ REQUISITOS
+--------------------------------------------------------------
+- Windows 10 u 11 de 64 bits.
+- Cualquier DAW con VST3 de 64 bits: Ableton Live, FL Studio,
+  Cubase, Studio One, Reaper, Bitwig...
+- NO funciona en Pro Tools (necesitaría formato AAX).
+- No hace falta instalar nada más.
+
+--------------------------------------------------------------
+ DÓNDE QUEDA / ACTUALIZAR / DESINSTALAR
+--------------------------------------------------------------
+- VST3: C:\Program Files\Common Files\VST3\Gaux Equalizer.vst3
+- App para probarlo sin DAW: menú Inicio > Gaux Equalizer
+- Tus presets: carpeta Música > Gaux EQ > Presets.
+- Actualizar: instala la versión nueva encima. Tus presets se
+  conservan.
+- Desinstalar: Configuración > Aplicaciones > Gaux Equalizer >
+  Desinstalar.
+
+--------------------------------------------------------------
+ LICENCIA
+--------------------------------------------------------------
+Software libre y gratuito (licencia GNU AGPLv3), sin garantía.
+El código fuente va incluido en este paquete. Detalles en
+LICENCIA.txt.

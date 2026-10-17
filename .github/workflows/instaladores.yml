@@ -1,0 +1,126 @@
+# Gaux Equalizer - compila, prueba y crea los instaladores de Mac y Windows.
+# Se ejecuta a mano (pestana Actions > Instaladores > "Run workflow") o al crear una
+# etiqueta vX.Y.Z (entonces ademas publica una Release con los dos zip para descargar).
+name: Instaladores
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: instaladores-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  mac:
+    name: Mac (universal)
+    runs-on: macos-15
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Pruebas del motor de sonido
+        run: |
+          clang++ -std=c++17 -O2 -I Source Tests/DspTests.cpp -o dsptests
+          ./dsptests
+
+      - name: Compilar y crear el instalador
+        run: bash package_mac.sh
+
+      - name: Instalar el .pkg (como lo haria un usuario)
+        run: |
+          sudo installer -pkg "$(ls dist/*/Gaux\ Equalizer.pkg)" -target /
+          ls -la "/Library/Audio/Plug-Ins/VST3/" "/Library/Audio/Plug-Ins/Components/"
+          killall -9 AudioComponentRegistrar 2>/dev/null || true
+          sleep 3
+          auval -v aufx Gxeq Gaux
+
+      - name: Validar con pluginval, nivel maximo (VST3 y AU)
+        run: |
+          curl -fsSL -o pluginval.zip https://github.com/Tracktion/pluginval/releases/latest/download/pluginval_macOS.zip
+          unzip -q pluginval.zip
+          PV=pluginval.app/Contents/MacOS/pluginval
+          $PV validate "/Library/Audio/Plug-Ins/VST3/Gaux Equalizer.vst3" --strictness-level 10 --repeat 2 --randomise --skip-gui-tests --timeout-ms 900000 --sample-rates 44100,48000,96000,192000 --block-sizes 16,64,256,1024,4096
+          $PV validate "/Library/Audio/Plug-Ins/Components/Gaux Equalizer.component" --strictness-level 10 --repeat 2 --randomise --skip-gui-tests --timeout-ms 900000 --sample-rates 44100,48000,96000,192000 --block-sizes 16,64,256,1024,4096
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GauxEQ-Mac
+          path: dist/*.zip
+          if-no-files-found: error
+
+  windows:
+    name: Windows (x64)
+    runs-on: windows-2022
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Inno Setup
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) { choco install innosetup -y --no-progress }
+
+      - name: Compilar y crear el instalador
+        shell: pwsh
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File package_windows.ps1
+
+      - name: Pruebas del motor de sonido (compilador de Windows)
+        shell: pwsh
+        run: |
+          cmake --build build-package --config Release --target GauxDspTests
+          & (Get-ChildItem -Recurse -Filter GauxDspTests.exe build-package | Select-Object -First 1).FullName
+          if ($LASTEXITCODE) { exit 1 }
+
+      - name: Instalar (como lo haria un usuario, en modo silencioso)
+        shell: pwsh
+        run: |
+          $setup = (Get-ChildItem -Recurse -Filter *_Windows_Setup.exe dist | Select-Object -First 1).FullName
+          Start-Process -Wait -FilePath $setup -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/SP-'
+          if (-not (Test-Path "$env:CommonProgramFiles\VST3\Gaux Equalizer.vst3\Contents\x86_64-win\Gaux Equalizer.vst3")) { throw 'El instalador no dejo el VST3 en su lugar' }
+
+      - name: Validar con pluginval, nivel maximo (VST3)
+        shell: pwsh
+        run: |
+          Invoke-WebRequest -UseBasicParsing -Uri https://github.com/Tracktion/pluginval/releases/latest/download/pluginval_Windows.zip -OutFile pluginval.zip
+          Expand-Archive pluginval.zip -DestinationPath pv
+          $pv = (Get-ChildItem -Recurse -Filter pluginval.exe pv | Select-Object -First 1).FullName
+          & $pv validate "$env:CommonProgramFiles\VST3\Gaux Equalizer.vst3" --strictness-level 10 --repeat 2 --randomise --skip-gui-tests --timeout-ms 900000 --sample-rates 44100,48000,96000,192000 --block-sizes 16,64,256,1024,4096
+          if ($LASTEXITCODE) { exit 1 }
+
+      - name: Desinstalar (comprobar que no deja restos)
+        shell: pwsh
+        run: |
+          $u = Get-ChildItem "${env:ProgramFiles}\Gaux\Gaux Equalizer\unins*.exe" | Select-Object -First 1
+          Start-Process -Wait -FilePath $u.FullName -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART'
+          Start-Sleep -Seconds 3
+          if (Test-Path "$env:CommonProgramFiles\VST3\Gaux Equalizer.vst3") { throw 'El desinstalador dejo el VST3' }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GauxEQ-Windows
+          path: dist/*.zip
+          if-no-files-found: error
+
+  release:
+    name: Publicar Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [mac, windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: paquetes
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: paquetes/*.zip
+          body: |
+            Gaux Equalizer ${{ github.ref_name }}
+            - Mac (Apple Silicon e Intel): GauxEQ_..._Mac.zip
+            - Windows 10/11 64 bits: GauxEQ_..._Windows.zip
+            Lee "ANTES DE INSTALAR" dentro de cada zip.

@@ -1,0 +1,26 @@
+﻿GAUX EQUALIZER
+Copyright (C) 2026 Aleksander Gaux (Alejandro González)
+
+Este programa es software libre: puedes redistribuirlo y/o
+modificarlo bajo los términos de la Licencia Pública General Affero
+de GNU (GNU AGPL) publicada por la Free Software Foundation, versión 3.
+
+Se distribuye con la esperanza de que sea útil, pero SIN NINGUNA
+GARANTÍA; ni siquiera la garantía implícita de COMERCIALIZACIÓN o
+IDONEIDAD PARA UN PROPÓSITO PARTICULAR. Consulta la licencia completa
+en el archivo "AGPLv3.txt" (si viene incluido) o en
+https://www.gnu.org/licenses/agpl-3.0.html
+
+CÓDIGO FUENTE
+El código fuente completo de esta versión va incluido en el archivo
+"GauxEQ_codigo_fuente.zip" de este mismo paquete.
+
+COMPONENTES DE TERCEROS
+- JUCE (https://juce.com), usado bajo la licencia GNU AGPLv3.
+- VST3 SDK de Steinberg (incluido en JUCE), licencia MIT.
+  VST es una marca registrada de Steinberg Media Technologies GmbH.
+- PFFFT (FFT rapida), de Julien Pommier, licencia tipo BSD (el texto
+  esta en Source/ThirdParty/pffft/LICENSE.txt del codigo fuente).
+- Tipografías Space Grotesk, Oswald, JetBrains Mono y Syne, bajo la
+  SIL Open Font License 1.1 (los textos de esas licencias están en
+  la carpeta Resources/Fonts del código fuente).

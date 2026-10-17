@@ -1,0 +1,73 @@
+﻿==============================================================
+  GAUX EQUALIZER  -  LEE ESTO ANTES DE INSTALAR (Mac)
+==============================================================
+
+Gracias por probar Gaux Equalizer, un EQ gratuito hecho por
+Aleksander Gaux para productores.
+
+--------------------------------------------------------------
+ IMPORTANTE: VAS A VER UNA ALERTA DE APPLE (ES NORMAL)
+--------------------------------------------------------------
+Apple cobra 99 USD al año para "verificar" a los desarrolladores.
+Este plugin es gratuito y no tiene esa verificación, así que la
+primera vez que abras el instalador el Mac dirá algo como:
+
+   "No se puede abrir 'Gaux Equalizer.pkg' porque Apple no puede
+    comprobar que no contenga software malicioso."
+
+No es un virus: es solo que no pasó por la verificación paga de
+Apple. Se permite UNA vez y listo.
+
+--------------------------------------------------------------
+ PASOS
+--------------------------------------------------------------
+1. Descomprime el zip (doble clic) si no lo has hecho.
+
+2. Doble clic en "Gaux Equalizer.pkg".
+   Aparece la alerta de Apple -> pulsa "OK" o "Listo".
+   (NO pulses "Trasladar a la papelera".)
+
+3. Abre  Ajustes del Sistema > Privacidad y seguridad.
+   Baja hasta el final: verás "Se bloqueó 'Gaux Equalizer.pkg'..."
+   Pulsa "Abrir de todas formas" y pon la contraseña del Mac.
+   (En macOS 14 o anterior también sirve: clic derecho sobre el
+    .pkg > Abrir > Abrir.)
+
+4. Se abre el instalador: Continuar > Instalar > contraseña del Mac.
+   En "Personalizar" puedes elegir VST3, Audio Unit y la app
+   independiente. Por defecto se instala todo.
+
+5. Abre tu DAW y vuelve a escanear los plugins:
+   - Ableton Live: Ajustes > Plug-ins > activa "Usar Audio Units v2"
+     y "Usar carpetas del sistema VST3" > "Volver a escanear".
+   - Logic Pro: aparece solo en Audio Units > Gaux.
+   - FL Studio: Opciones > Administrar plugins > Buscar plugins.
+   Busca "Gaux Equalizer".
+
+--------------------------------------------------------------
+ REQUISITOS
+--------------------------------------------------------------
+- macOS 11 (Big Sur) o más nuevo.
+- Mac con Apple Silicon (M1 a M5) o con Intel.
+- Cualquier DAW con VST3 o Audio Units: Ableton Live, Logic Pro,
+  FL Studio, Cubase, Studio One, Reaper, Bitwig, GarageBand...
+- NO funciona en Pro Tools (necesitaría formato AAX).
+
+--------------------------------------------------------------
+ DÓNDE QUEDA / ACTUALIZAR / DESINSTALAR
+--------------------------------------------------------------
+- VST3:  /Library/Audio/Plug-Ins/VST3/Gaux Equalizer.vst3
+- AU:    /Library/Audio/Plug-Ins/Components/Gaux Equalizer.component
+- App:   /Applications/Gaux Equalizer.app
+- Tus presets: carpeta Música > Gaux EQ > Presets.
+- Actualizar: instala la versión nueva encima. Tus presets se
+  conservan.
+- Desinstalar: borra los tres archivos de arriba (en el Finder:
+  Ir > Ir a la carpeta... y pega la ruta).
+
+--------------------------------------------------------------
+ LICENCIA
+--------------------------------------------------------------
+Software libre y gratuito (licencia GNU AGPLv3), sin garantía.
+El código fuente va incluido en este paquete. Detalles en
+LICENCIA.txt.

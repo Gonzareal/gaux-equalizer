@@ -1,0 +1,9 @@
+#!/bin/bash
+# Despues de instalar: quitar marcas de cuarentena y refrescar la cache de Audio Units
+for p in "/Library/Audio/Plug-Ins/VST3/Gaux Equalizer.vst3" \
+         "/Library/Audio/Plug-Ins/Components/Gaux Equalizer.component" \
+         "/Applications/Gaux Equalizer.app"; do
+    [ -e "$p" ] && xattr -dr com.apple.quarantine "$p" 2>/dev/null
+done
+killall -9 AudioComponentRegistrar >/dev/null 2>&1
+exit 0

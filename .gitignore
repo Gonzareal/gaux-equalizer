@@ -1,0 +1,6 @@
+build/
+build-*/
+dist/
+JUCE/
+.DS_Store
+*.zip
