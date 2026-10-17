@@ -893,7 +893,6 @@ int main (int argc, char** argv)
             const auto frozen = d->analyzerShapeBounds();
             feed (0.02f, 30);
             const int drew = d->analyzerShapeBounds() == frozen ? 0 : 1;
-            d->setViewOption ("piano", 1);
             for (int i = 0; i < 2; ++i) d->advanceFrame (1.0f / 60.0f);
             snapshot (*edm, outDir + "/gaux_piano.png");
             d->setViewOption ("anFreeze", 0);
@@ -902,10 +901,40 @@ int main (int argc, char** argv)
             // se guardan con la sesion
             juce::MemoryBlock mb; pm.getStateInformation (mb);
             GauxEqProcessor pr; pr.setStateInformation (mb.getData(), (int) mb.getSize());
-            const bool saved = (int) pr.apvts.state.getProperty ("dispRange", 2) == 1 && (bool) pr.apvts.state.getProperty ("piano", false);
+            const bool saved = (int) pr.apvts.state.getProperty ("dispRange", 2) == 1 && (bool) pr.apvts.state.getProperty ("anFreeze", true) == false;
             std::printf ("Pantalla: rango +-12 dB %s, congelar (el analizador queda quieto: %d cambios) %s, al descongelar vuelve %s, se guarda con la sesion %s\n",
                          rangeOk ? "OK" : "FALLA", drew, drew == 0 ? "OK" : "FALLA", drew2 > 0 ? "OK" : "FALLA", saved ? "OK" : "FALLA");
             okU = okU && rangeOk && drew == 0 && drew2 > 0 && saved;
+        }
+        // 5) teclado de piano abajo: alineado con la pantalla, clic = llevar la banda elegida a esa nota
+        {
+            GauxEqProcessor pq;
+            pq.prepareToPlay (48000.0, 512);
+            setP (pq, ParamID::band (0, "on"), 1); setP (pq, ParamID::band (0, "freq"), 452.0f);
+            std::unique_ptr<juce::AudioProcessorEditor> edq (pq.createEditor());
+            edq->setSize (1160, 760);
+            auto* d = dynamic_cast<gaux::SpectrumDisplay*> (findById (edq.get(), "display"));
+            auto* pk = dynamic_cast<gaux::PianoStrip*> (findById (edq.get(), "piano"));
+            bool ok = d != nullptr && pk != nullptr && pk->isVisible();
+            if (ok)
+            {
+                const auto n0 = d->nodePosition (0);
+                d->mouseDown (mouseAt (d, n0, n0)); d->mouseUp (mouseAt (d, n0, n0));
+                pk->timerCallback();
+                const bool lit = pk->litBandNote() == 69;   // 452 Hz ~ A4
+                // la tecla A4 queda justo debajo de 440 Hz en la pantalla
+                const float xa = pk->keyCentre (69) + (float) (pk->getX() - d->getX());
+                const bool aligned = std::abs (xa - d->xForFreq (440.0)) < 0.5f;
+                const juce::Point<float> kp (pk->keyCentre (57), (float) pk->getHeight() - 3.0f);   // A3
+                pk->mouseDown (mouseAt (pk, kp, kp));
+                const bool tuned = std::abs (pq.params.band (0).freq - 220.0) < 0.05;
+                for (int i = 0; i < 3; ++i) d->advanceFrame (1.0f / 60.0f);
+                snapshot (*edq, outDir + "/gaux_teclado.png");
+                ok = lit && aligned && tuned;
+                std::printf ("Teclado: nota de la banda iluminada %s, alineado con la pantalla %s, clic en A3 lleva la banda a %.1f Hz %s\n",
+                             lit ? "OK" : "FALLA", aligned ? "OK" : "FALLA", pq.params.band (0).freq, tuned ? "OK" : "FALLA");
+            }
+            okU = okU && ok;
         }
         std::printf ("DETALLES DE USO %s\n", okU ? "OK" : "FALLA");
         if (! okU) return 1;

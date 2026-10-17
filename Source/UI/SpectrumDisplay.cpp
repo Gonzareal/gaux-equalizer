@@ -107,7 +107,7 @@ SpectrumDisplay::ViewOpts SpectrumDisplay::viewOptions() const
     o.range = juce::jlimit (0, 3, (int) st.getProperty ("dispRange", 2));
     o.freeze = (bool) st.getProperty ("anFreeze", false);
     o.pre = (bool) st.getProperty ("anPre", true);
-    o.piano = (bool) st.getProperty ("piano", false);
+    o.piano = (bool) st.getProperty ("piano", true);   // (teclado de abajo, en la ventana)
     return o;
 }
 
@@ -293,7 +293,7 @@ bool SpectrumDisplay::updateCurve (Curve& c, const BandSettings& s)
     if (c.valid && sameCurve (c.s, s) && c.db.size() == gridFreqs.size()) { c.s = s; return false; }
     c.s = s; c.valid = true; c.version = ++curveSerial;
     c.db.resize (gridFreqs.size());
-    responseOfBandDb (s, gridFreqs.data(), (int) gridFreqs.size(), gridFs, gridLin, c.db.data());
+    responseOfBandDb (s, gridFreqs.data(), (int) gridFreqs.size(), gridFs, gridLin, c.db.data(), ! gridNat, gridBrickRes);
     return true;
 }
 
@@ -319,9 +319,12 @@ bool SpectrumDisplay::refreshCurves()
     // fase lineal o natural: suena (y se dibuja) la curva analogica exacta
     const bool lin = proc.linearActiveNow.load() || proc.naturalActiveNow.load();
     bool changed = false;
-    if (a != gridArea || fs != gridFs || lin != gridLin || dbRange != curvesDbRange)
+    const bool nat = proc.naturalActiveNow.load();   // (natural: el BRICK es el de 144 dB/oct, no la pared ideal)
+    double brickRes = 0.0;   // (fase lineal: la pared BRICK que el FIR puede hacer)
+    brickRes = proc.linearBrickResolution();
+    if (a != gridArea || fs != gridFs || lin != gridLin || nat != gridNat || brickRes != gridBrickRes || dbRange != curvesDbRange)
     {
-        gridArea = a; gridFs = fs; gridLin = lin; curvesDbRange = dbRange;
+        gridArea = a; gridFs = fs; gridLin = lin; gridNat = nat; gridBrickRes = brickRes; curvesDbRange = dbRange;
         gridFreqs.clear(); gridX.clear();
         for (float x = a.getX(); x <= a.getRight() + 1.0f; x += 2.0f) { gridX.push_back (x); gridFreqs.push_back (xToFreq (x)); }
         gridExIdx.clear();
@@ -847,7 +850,7 @@ void SpectrumDisplay::paint (juce::Graphics& g)
         g.drawText (txt, box, juce::Justification::centred);
     }
 
-    if (! vintageMode) { paintClash (g, a); paintPeaks (g, a); paintSketch (g, a); if (opts.piano) paintPiano (g, a); }
+    if (! vintageMode) { paintClash (g, a); paintPeaks (g, a); paintSketch (g, a); }
     if (! lasso.isEmpty())
     {
         g.setColour (Colours::accent.withAlpha (0.07f));
@@ -1211,7 +1214,7 @@ void SpectrumDisplay::mouseDown (const juce::MouseEvent& e)
             for (int i = 0; i < 4; ++i) rg.addItem (40 + i, "+-" + juce::String ((int) kRanges[i]) + " dB", true, o.range == i);
             m.addSubMenu ("Analizador", an);
             m.addSubMenu ("Rango de la pantalla", rg);
-            m.addItem (50, "Teclado de piano (notas)", true, o.piano);
+            m.addItem (50, "Teclado de piano abajo (notas)", true, o.piano);
             m.addSeparator();
             m.addItem (2, "SKETCH: dibujar la curva con el mouse", true, sketchMode);
             m.addItem (60, "Copiar la curva (todas las bandas)");

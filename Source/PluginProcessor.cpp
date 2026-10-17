@@ -498,6 +498,23 @@ void GauxEqProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
 
     auto& buf = mainBuffer;   // a partir de aqui se trabaja solo con el bus principal
 
+    // Proteccion: si llega un NaN o un infinito (un plugin roto antes en la cadena), se cambia por silencio.
+    // Sin esto, los filtros guardarian el NaN y el plugin quedaria mudo hasta reiniciar el DAW.
+    // (x * 0 da 0 para cualquier numero normal y NaN para NaN/infinito: una suma rapida lo detecta)
+    for (int ch = 0; ch < numChannels; ++ch)
+    {
+        float* d = buf.getWritePointer (ch);
+        float probe = 0.0f;
+        for (int i = 0; i < numSamples; ++i) probe += d[i] * 0.0f;
+        if (probe != 0.0f || ! std::isfinite (probe)) for (int i = 0; i < numSamples; ++i) if (! std::isfinite (d[i])) d[i] = 0.0f;
+    }
+    if (scData != nullptr)
+    {
+        float probe = 0.0f;
+        for (int i = 0; i < numSamples; ++i) probe += scData[i] * 0.0f;
+        if (! std::isfinite (probe)) { float* d = scBuffer.getWritePointer (0); for (int i = 0; i < numSamples; ++i) if (! std::isfinite (d[i])) d[i] = 0.0f; }
+    }
+
     // EQ MATCH aprendiendo: copiar esta pista (antes del EQ) y/o el sidechain a sus colas (nada mas)
     if (match.learnSrc.load (std::memory_order_relaxed) && numSamples <= (int) matchScratch.size())
     {
@@ -893,6 +910,27 @@ void GauxEqProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
                 float* d = buf.getWritePointer (ch);
                 d[i] += b * (dryDelay.getSample (ch, idx) - d[i]);
             }
+        }
+    }
+
+    // Red de seguridad: si algo adentro llego a NaN/infinito, se silencia el bloque y se limpia la memoria
+    // de todos los procesos (vuelve a sonar normal en el bloque siguiente, en vez de quedar mudo)
+    {
+        float probe = 0.0f;
+        for (int ch = 0; ch < numChannels; ++ch) { const float* d = buf.getReadPointer (ch); for (int i = 0; i < numSamples; ++i) probe += d[i] * 0.0f; }
+        if (! std::isfinite (probe))
+        {
+            for (int ch = 0; ch < numChannels; ++ch) buf.clear (ch, 0, numSamples);
+            for (auto& b : bands) b.reset();
+            vintage.reset();
+            spectral.reset();
+            if (auto* e = linEngine.load()) e->reset();
+            if (auto* os = oversamplers[juce::jlimit (0, 2, currentQuality)].get()) os->reset();
+            for (auto& chs : rangeStates) for (auto& st : chs) st.reset();
+            for (auto& st : listenStates) st.reset();
+            dryDelay.clear();
+            scEnv = 0.0; scDuckSmooth = 0.0;
+            dspResets.fetch_add (1);
         }
     }
 

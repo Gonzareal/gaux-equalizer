@@ -12,6 +12,7 @@
 #include "UI/PresetBar.h"
 #include "UI/SidechainPanel.h"
 #include "UI/MatchPanel.h"
+#include "UI/PianoStrip.h"
 
 namespace gaux
 {
@@ -225,7 +226,7 @@ public:
     std::function<void()> onDesignSizeChanged;
     std::function<void (float)> onScaleRequested;
 
-    static constexpr int kWidth = 1160, kHeight = 760, kHeaderH = 64, kFooterH = 58, kStripH = 196, kDrawerH = 270;
+    static constexpr int kWidth = 1160, kHeight = 760, kHeaderH = 64, kFooterH = 58, kStripH = 196, kPianoH = 22, kDrawerH = 270;
 
 private:
     void timerCallback() override;
@@ -254,6 +255,8 @@ private:
 
     // Parametrico
     gaux::SpectrumDisplay display;
+    gaux::PianoStrip piano { proc, display };
+    bool pianoShown = true;
     gaux::BandEditor bandEditor;
     juce::OwnedArray<gaux::BandChip> bandChips;
     gaux::Chip analyzerChip { "ANALYZER" }, autoGainChip { "AUTO GAIN" }, phaseChip { "MIN" };

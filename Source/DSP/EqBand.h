@@ -242,7 +242,19 @@ inline double magnitudeOfBand (const BandSettings& s, double freq, double fs)
 
 // Respuesta del EQ analogico ideal de la banda (la que se usa en el modo de fase lineal: la curva es
 // exactamente la analogica, sin ninguna compresion cerca de Nyquist)
-inline double analogMagnitudeOfBand (const BandSettings& s, double f)
+// Orden de la pared BRICK en fase lineal: tan empinada como el FIR la puede dibujar. resolutionHz = fs / largo del
+// filtro (0 = pared ideal de orden 64). La caida de -3 a -60 dB ocupa al menos 16 "pasos" del FIR; asi lo que suena
+// es exactamente lo que se ve (un BRICK en 25 Hz necesita LIN HQ para ser una pared de verdad).
+inline int linearBrickOrder (bool lowCut, double f0, double resolutionHz)
+{
+    if (resolutionHz <= 0.0) return 64;
+    const double span = 16.0 * resolutionHz / std::max (1.0, f0);
+    const double x = lowCut ? 1.0 / std::max (1.0e-6, 1.0 - std::min (0.95, span)) : 1.0 + span;
+    return std::clamp ((int) std::floor (std::log (1000.0) / std::log (x)), 8, 64);
+}
+
+// idealBrick: BRICK como pared (fase lineal); si no, el Butterworth de 144 dB/oct que usan los IIR (min/natural)
+inline double analogMagnitudeOfBand (const BandSettings& s, double f, bool idealBrick = true, double brickResolutionHz = 0.0)
 {
     if (! s.on) return 1.0;
     using Cx = std::complex<double>;
@@ -270,11 +282,11 @@ inline double analogMagnitudeOfBand (const BandSettings& s, double f)
         case BandType::HighCut:
         {
             const bool lowCut = s.type == (int) BandType::LowCut;
-            if (s.slope == kSlopeBrick)
+            if (s.slope == kSlopeBrick && idealBrick)
             {
                 // Pared ideal (modos lineales): Butterworth de orden 64, plana hasta el corte y vertical despues
                 const double x = lowCut ? f0 / std::max (1.0e-6, f) : std::max (1.0e-6, f) / f0;
-                return 1.0 / std::sqrt (1.0 + std::pow (x, 128.0));
+                return 1.0 / std::sqrt (1.0 + std::pow (x, 2.0 * linearBrickOrder (lowCut, f0, brickResolutionHz)));
             }
             const auto plan = butterworthPlan (cutPoles (s.slope));
             double m = 1.0;
@@ -300,13 +312,13 @@ inline double magnitudeOfBand (const BandSettings& s, double freq, double fs, bo
 
 // La misma curva para muchas frecuencias a la vez (para la pantalla): el filtro se disena una sola vez.
 // Resultado en dB, limitado a -60 dB como la pantalla.
-inline void responseOfBandDb (const BandSettings& s, const double* freqs, int n, double fs, bool linearPhase, float* outDb)
+inline void responseOfBandDb (const BandSettings& s, const double* freqs, int n, double fs, bool linearPhase, float* outDb, bool idealBrick = true, double brickResolutionHz = 0.0)
 {
     if (! s.on) { std::fill (outDb, outDb + n, 0.0f); return; }
     if (linearPhase)
     {
         for (int i = 0; i < n; ++i)
-            outDb[i] = (float) (20.0 * std::log10 (std::max (1.0e-3, analogMagnitudeOfBand (s, freqs[i]))));
+            outDb[i] = (float) (20.0 * std::log10 (std::max (1.0e-3, analogMagnitudeOfBand (s, freqs[i], idealBrick, brickResolutionHz))));
         return;
     }
     BiquadCoeffs c[kMaxSections];

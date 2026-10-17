@@ -97,7 +97,15 @@ public:
     std::atomic<int> uiActive { 0 };               // ventanas abiertas (medidores y analizador solo si hay alguna)
     std::atomic<bool> sleepingNow { false };       // la pista esta en silencio y el plugin no gasta CPU
     std::atomic<bool> linearActiveNow { false };
-    std::atomic<bool> naturalActiveNow { false };   // fase natural en uso (la pantalla muestra la curva analogica)
+    std::atomic<bool> naturalActiveNow { false };
+    std::atomic<int> dspResets { 0 };
+    // Fase lineal: resolucion del FIR en uso (Hz) para dibujar el BRICK que realmente suena (0 si no hay fase lineal)
+    double linearBrickResolution() const
+    {
+        if (! linearActiveNow.load()) return 0.0;
+        auto* e = linEngine.load();
+        return e != nullptr ? e->getSampleRate() / juce::jmax (1, e->getLength()) : 0.0;
+    }   // (veces que la red de seguridad limpio todo por un NaN interno)   // fase natural en uso (la pantalla muestra la curva analogica)
     std::atomic<bool> spectralActiveNow { false };   // alguna banda usa dinamica espectral (hay latencia)
     const gaux::SpectralDynamics& getSpectral() const { return spectral; }
 

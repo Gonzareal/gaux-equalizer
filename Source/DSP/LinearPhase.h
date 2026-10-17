@@ -70,7 +70,7 @@ inline void designLinearPhase (const LinearSpec& sp, juce::AudioBuffer<float>& d
         for (const auto& b : sp.bands)
         {
             if (! b.on) continue;
-            const double m = analogMagnitudeOfBand (b, f);
+            const double m = analogMagnitudeOfBand (b, f, true, sp.fs / sp.length);
             switch (sp.mono ? StereoMode::Stereo : (StereoMode) b.stereo)
             {
                 case StereoMode::Stereo: hst *= m; break;

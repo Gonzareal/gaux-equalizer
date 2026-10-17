@@ -74,6 +74,9 @@ MainView::MainView (GauxEqProcessor& p)
     bandEditor.setComponentID ("bandEditor");
     bandEditor.onDeleted = [this] { selectBand (-1); };
     addChildComponent (display);
+    piano.getSelectedBand = [this] { return selectedBand; };
+    piano.setComponentID ("piano");
+    addChildComponent (piano);
     addChildComponent (bandEditor);
 
     for (int b = 0; b < kNumBands; ++b)
@@ -157,6 +160,8 @@ void MainView::updateModeView()
     mascot.vintageStyle = vintageView;
 
     display.setVisible (! vintageView);
+    pianoShown = (bool) proc.apvts.state.getProperty ("piano", true);
+    piano.setVisible (! vintageView && pianoShown);
     for (auto* c : bandChips) c->setVisible (! vintageView);
     matchChip.setVisible (! vintageView);   // el match crea bandas del Parametrico
     for (juce::Component* c : { (juce::Component*) &analyzerChip, (juce::Component*) &autoGainChip, (juce::Component*) &phaseChip, (juce::Component*) &scaleKnob,
@@ -264,6 +269,7 @@ void MainView::timerCallback()
         if (++wheelQuietTicks > 12) { proc.history.commit(); wheelPending = false; wheelQuietTicks = 0; }
     }
     if ((++undoTick % 6) == 0) updateUndoButtons();
+    if (const bool ps = (bool) proc.apvts.state.getProperty ("piano", true); ps != pianoShown) { updateModeView(); resized(); repaint(); }
     // Sigue cambios hechos desde el DAW (automatizacion, presets)
     const bool v = proc.params.mode->load() > 0.5f;
     if (v != vintageView) { vintageView = v; updateModeView(); }
@@ -471,6 +477,9 @@ void MainView::resized()
     // Parametrico
     auto main = juce::Rectangle<int> (0, kHeaderH, kWidth, kHeight - kHeaderH);
     auto footer = main.removeFromBottom (kFooterH);
+    pianoShown = (bool) proc.apvts.state.getProperty ("piano", true);
+    // teclado de piano entre el panel de la banda y los numeros de las bandas, alineado con la pantalla
+    if (pianoShown) piano.setBounds (main.removeFromBottom (kPianoH));
     stripArea = main.removeFromBottom (kStripH);
     display.setBounds (main);
     truePeakLabel.setBounds (juce::Rectangle<int> (main.getCentreX() - 59, main.getY() + 10, 118, 22));

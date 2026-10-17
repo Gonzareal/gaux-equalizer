@@ -75,6 +75,7 @@ public:
     int lastSketchPlaced() const { return sketchPlaced; }
     bool sketchPreviewVisible() const { return inking && ! sketchFit.bands.empty(); }
     juce::Point<float> pointFor (double f, double db) const { return { freqToX (f), dbToY (db) }; }
+    float xForFreq (double f) const { return freqToX (f); }   // (el teclado de abajo usa la misma escala)
 
     // CAZA DE PICOS (agarrar del analizador): resonancias que sobresalen de su entorno
     struct GrabPeak { double f = 0, q = 4; float db = -140, prom = 0, alpha = 0; bool alive = false; };
@@ -144,7 +145,7 @@ private:
     // Curvas
     std::vector<double> gridFreqs;
     std::vector<float> gridX;
-    double gridFs = 0; bool gridLin = false; juce::Rectangle<float> gridArea;
+    double gridFs = 0, gridBrickRes = 0; bool gridLin = false, gridNat = false; juce::Rectangle<float> gridArea;
     std::array<Curve, kNumBands> liveCurve, statCurve, fullCurve;
     // Dinamica espectral: curva en vivo = estatica + accion por frecuencia (la exporta el motor)
     std::array<std::vector<float>, kNumBands> specDb;
@@ -220,7 +221,7 @@ private:
     juce::Point<float> lassoStart;
     void applyGroupDrag();
     void paintPiano (juce::Graphics&, juce::Rectangle<float>);
-    float bottomInset() const { return opts.piano ? 13.0f : 0.0f; }
+    float bottomInset() const { return 0.0f; }
 
     // Choques
     int clashTarget = -1, lastClashTick = -1, hoverClash = -1;
