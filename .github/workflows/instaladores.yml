@@ -118,8 +118,10 @@ jobs:
           $p = Start-Process -FilePath $pv -ArgumentList $args -Wait -PassThru -NoNewWindow -RedirectStandardOutput pv.log -RedirectStandardError pv_err.log
           Get-Content pv.log -Tail 8
           if ($p.ExitCode -ne 0 -or -not (Select-String -Path pv.log -Pattern 'SUCCESS' -Quiet)) {
-              $t = (Get-Content pv.log -Tail 40) -join '%0A'
-              Write-Output "::error title=pluginval Windows::$t"
+              $f = Select-String -Path pv.log -Pattern '!!!|failed|FAILED|Error|nan|NaN|inf' -Context 6,2 | Select-Object -First 8 | ForEach-Object { ($_.Context.PreContext + $_.Line + $_.Context.PostContext) -join '%0A' }
+              Write-Output ("::error title=pluginval Windows (fallas)::" + ($f -join '%0A=====%0A'))
+              $t = (Get-Content pv.log -Tail 25) -join '%0A'
+              Write-Output "::error title=pluginval Windows (final)::$t"
               exit 1
           }
 
