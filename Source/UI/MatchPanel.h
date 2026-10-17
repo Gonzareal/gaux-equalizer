@@ -17,8 +17,9 @@ public:
         fileChip.onClick = [this]
         {
             chooser = std::make_unique<juce::FileChooser> ("Tema de referencia", juce::File(), proc.match.getWildcard());
+            juce::Component::SafePointer<MatchPanel> self (this);   // (fuera de la lambda: el compilador de Windows lo necesita asi)
             chooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
-                                  [safe = juce::Component::SafePointer<MatchPanel> (this)] (const juce::FileChooser& fc)
+                                  [safe = self] (const juce::FileChooser& fc)
                                   {
                                       if (safe == nullptr) return;
                                       const auto f = fc.getResult();
