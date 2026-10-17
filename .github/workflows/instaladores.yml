@@ -57,24 +57,13 @@ jobs:
 
       # (pluginval para Mac viene compilado para Intel: en las maquinas Apple Silicon de GitHub corre traducido
       #  y es lento; por eso se prueba en menos combinaciones que en Windows, con un limite de tiempo por formato)
-      - name: Validar con pluginval, nivel maximo (VST3)
+      - name: Validar con pluginval, nivel maximo (VST3 y AU)
         timeout-minutes: 30
         run: |
           curl -fsSL -o pluginval.zip https://github.com/Tracktion/pluginval/releases/latest/download/pluginval_macOS.zip
           unzip -q pluginval.zip
-          set -o pipefail
-          pluginval.app/Contents/MacOS/pluginval validate "/Library/Audio/Plug-Ins/VST3/Gaux Equalizer.vst3" --strictness-level 10 --skip-gui-tests --timeout-ms 600000 --sample-rates 44100,96000 --block-sizes 64,1024 2>&1 | tee pv_vst3.log
-
-      - name: Validar con pluginval, nivel maximo (AU)
-        timeout-minutes: 30
-        run: |
-          set -o pipefail
-          pluginval.app/Contents/MacOS/pluginval validate "/Library/Audio/Plug-Ins/Components/Gaux Equalizer.component" --strictness-level 10 --skip-gui-tests --timeout-ms 600000 --sample-rates 48000 --block-sizes 512 2>&1 | tee pv_au.log
-
-      - name: Mostrar el final de pluginval
-        if: failure()
-        run: |
-          for f in pv_vst3.log pv_au.log; do [ -f $f ] || continue; msg=$(tail -n 40 $f | cut -c1-300 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}'); echo "::error title=$f::$msg"; done
+          bash .github/scripts/pluginval_mac.sh "/Library/Audio/Plug-Ins/VST3/Gaux Equalizer.vst3" vst3 --strictness-level 10 --skip-gui-tests --timeout-ms 300000 --sample-rates 44100,96000 --block-sizes 64,1024
+          bash .github/scripts/pluginval_mac.sh "/Library/Audio/Plug-Ins/Components/Gaux Equalizer.component" au --strictness-level 10 --skip-gui-tests --timeout-ms 300000 --sample-rates 48000 --block-sizes 512
 
   windows:
     name: Windows (x64)
