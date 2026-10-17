@@ -179,7 +179,7 @@ void MainView::updateModeView()
     presetBar.setAccent (vintageView ? Colours::lamp : Colours::accent);
     abSwitch.accent = vintageView ? Colours::lamp : Colours::accent; abSwitch.repaint();
 
-    const int h = kHeight + (vintageView && advancedOpen ? kDrawerH : 0);
+    const int h = vintageView && advancedOpen ? drawerTop() + kDrawerH : kHeight;
     if (getHeight() != h)
     {
         setSize (kWidth, h);
@@ -350,7 +350,7 @@ void MainView::paint (juce::Graphics& g)
 
         if (advancedOpen)
         {
-            auto drawer = getLocalBounds().withTop (kHeight).toFloat();
+            auto drawer = getLocalBounds().withTop (drawerTop()).toFloat();
             g.setGradientFill (juce::ColourGradient (juce::Colour (0xff1c1d1e), 0, drawer.getY(), juce::Colour (0xff0b0b0c), 0, drawer.getBottom(), false));
             g.fillRect (drawer);
             g.setColour (juce::Colours::black);
@@ -499,8 +499,9 @@ void MainView::resized()
     scaleKnob.setBounds (f.removeFromRight (104));
 
     // Vintage
-    faceplate.setBounds (0, kHeaderH, kWidth, kHeight - kHeaderH);
-    drawerDisplay.setBounds (juce::Rectangle<int> (0, kHeight, kWidth, kDrawerH).reduced (54, 26).translated (0, 2));
+    const bool drawer = vintageView && advancedOpen;
+    faceplate.setBounds (0, kHeaderH, kWidth, (drawer ? drawerTop() : kHeight) - kHeaderH);
+    drawerDisplay.setBounds (juce::Rectangle<int> (0, drawerTop(), kWidth, kDrawerH).reduced (54, 22).translated (0, -2));
 }
 
 //==============================================================================
@@ -518,7 +519,14 @@ GauxEqEditor::GauxEqEditor (GauxEqProcessor& p) : AudioProcessorEditor (&p), pro
 void GauxEqEditor::designSizeChanged()
 {
     const int w = view.getWidth(), h = view.getHeight();
-    const float target = uiScale;   // setResizeLimits puede llamar a resized() y cambiar uiScale
+    float target = uiScale;   // setResizeLimits puede llamar a resized() y cambiar uiScale
+    // Si al abrir AVANZADO la ventana ya no cabe en la pantalla, se achica lo justo (nunca se sale por abajo)
+    if (const auto* d = juce::Desktop::getInstance().getDisplays().getPrimaryDisplay())
+    {
+        const auto* here = isShowing() ? juce::Desktop::getInstance().getDisplays().getDisplayForRect (getScreenBounds()) : d;
+        const float maxH = (float) (here != nullptr ? here : d)->userArea.getHeight() - 64.0f;   // barra de titulo del DAW
+        if (maxH > 200.0f && h * target > maxH) target = juce::jmax (0.5f, maxH / (float) h);
+    }
     setResizeLimits (w / 2, h / 2, w * 2, h * 2);
     if (auto* c = getConstrainer()) c->setFixedAspectRatio ((double) w / (double) h);
     setSize (juce::roundToInt (w * target), juce::roundToInt (h * target));

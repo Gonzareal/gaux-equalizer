@@ -159,9 +159,11 @@ public:
         sections.clear();
         auto r = getLocalBounds().reduced (10, 6);
         const int gap = 6;
-        units[0] = { "FILTER", "HIGH / LOW PASS", r.removeFromTop (150) };
+        // compacto (con la pantalla AVANZADO abierta debajo): mismas perillas, un poco mas pequenas
+        const bool compact = getHeight() < 650;
+        units[0] = { "FILTER", "HIGH / LOW PASS", r.removeFromTop (compact ? 138 : 150) };
         r.removeFromTop (gap);
-        units[1] = { "MID", "MID-RANGE EQUALIZER", r.removeFromTop (182) };
+        units[1] = { "MID", "MID-RANGE EQUALIZER", r.removeFromTop (compact ? 150 : 182) };
         r.removeFromTop (gap);
         units[2] = { "PROGRAM", "PROGRAM EQUALIZER", r };
 

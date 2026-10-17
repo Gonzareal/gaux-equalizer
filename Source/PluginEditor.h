@@ -226,7 +226,10 @@ public:
     std::function<void()> onDesignSizeChanged;
     std::function<void (float)> onScaleRequested;
 
-    static constexpr int kWidth = 1160, kHeight = 760, kHeaderH = 64, kFooterH = 58, kStripH = 196, kPianoH = 22, kDrawerH = 270;
+    static constexpr int kWidth = 1160, kHeight = 760, kHeaderH = 64, kFooterH = 58, kStripH = 196, kPianoH = 22, kDrawerH = 190;
+    // Con AVANZADO abierto en Vintage los racks se compactan para que el total (850 px al 100%) quepa en la pantalla de un MacBook
+    static constexpr int kCompactCut = 100;
+    int drawerTop() const { return kHeight - kCompactCut; }
 
 private:
     void timerCallback() override;
