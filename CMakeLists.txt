@@ -2,6 +2,10 @@ cmake_minimum_required(VERSION 3.22)
 
 project(GauxEqualizer VERSION 0.21.0)
 
+# Windows: runtime de C++ estatico en TODOS los objetivos (JUCE, el plugin y sus envoltorios VST3/Standalone),
+# asi el plugin no depende de que el PC tenga instalado el runtime de Visual Studio y todo enlaza igual
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+
 # En Mac: compilar para Apple Silicon (M1-M5). Cambia a "arm64;x86_64" para un binario universal.
 if(APPLE AND NOT CMAKE_OSX_ARCHITECTURES)
     set(CMAKE_OSX_ARCHITECTURES "arm64" CACHE STRING "" FORCE)
