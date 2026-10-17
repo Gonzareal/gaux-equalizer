@@ -1,11 +1,13 @@
 # Gaux Equalizer - compila, prueba y crea los instaladores de Mac y Windows.
-# Se ejecuta a mano (pestana Actions > Instaladores > "Run workflow") o al crear una
-# etiqueta vX.Y.Z (entonces ademas publica una Release con los dos zip para descargar).
+# Se ejecuta solo cuando cambia el codigo (rama main), a mano (pestana Actions > Instaladores > "Run workflow")
+# o al crear una etiqueta vX.Y.Z (entonces ademas publica una Release con los dos zip para descargar).
 name: Instaladores
 
 on:
   push:
+    branches: [main]
     tags: ['v*']
+    paths-ignore: ['README.md']
   workflow_dispatch:
 
 permissions:
