@@ -144,6 +144,13 @@ void SpectrumDisplay::advanceFrame (float dt)
     bloom += (lvl - bloom) * kb;
     if (bloom < 1.0e-3f && lvl <= 0.0f) bloom = 0.0f;
 
+    {
+        // Mouse sobre la pantalla (sin arrastrar nada): se congela la foto del espectro y de sus picos,
+        // para poder leerla y agarrar una resonancia sin que se mueva
+        const bool hf = ! vintageMode && isMouseOver (true) && dragMode == Drag::None && ! sketchMode
+                        && plotArea().contains (getMouseXYRelative().toFloat());
+        if (hf != hoverFrozen) { hoverFrozen = hf; repaint(); }
+    }
     bool dirty = updateAnalyzer (post, proc.analyzerFifo, dt);
     if (! vintageMode && opts.pre) dirty = updateAnalyzer (pre, proc.preFifo, dt) || dirty;
     else proc.preFifo.pull (pullBuffer.data(), (int) pullBuffer.size());   // vaciar
@@ -167,7 +174,7 @@ void SpectrumDisplay::advanceFrame (float dt)
         if (ver != lastMatchVersion) { lastMatchVersion = ver; dirty = true; }
     }
     if (showFps) { fpsAcc += dt; if (fpsAcc > 0.25f) { fpsAcc = 0; dirty = true; } }
-    if (! vintageMode && ! opts.freeze) dirty = detectPeaks (dt) || dirty;
+    if (! vintageMode && ! opts.freeze && ! hoverFrozen) dirty = detectPeaks (dt) || dirty;
     if (clashTarget >= 0) dirty = updateClash() || dirty;
     // SKETCH: ajuste en vivo pendiente, tinta que se desvanece, anillos de las bandas nuevas
     if (inking && sketchFitStale && juce::Time::getMillisecondCounterHiRes() - lastSketchFitMs > 33.0) { refitSketch(); dirty = true; }
@@ -197,7 +204,7 @@ bool SpectrumDisplay::updateAnalyzer (Analyzer& an, AnalyzerFifo& fifo, float dt
     }
     const bool newData = n > 0;
     if (newData) an.fresh = true;
-    if (opts.freeze && an.visible) { an.fresh = false; return false; }   // CONGELADO: se queda la ultima foto
+    if ((opts.freeze || hoverFrozen) && an.visible) { an.fresh = false; return false; }   // CONGELADO: se queda la ultima foto
 
     if (proc.params.analyzer->load() < 0.5f)
     {
@@ -209,7 +216,7 @@ bool SpectrumDisplay::updateAnalyzer (Analyzer& an, AnalyzerFifo& fifo, float dt
     if (! newData && ! an.visible) return false;   // nada que mover: no se redibuja
 
     // Balistica en tiempo real: subida rapida, caida de ~44 dB/s (independiente de los FPS)
-    static constexpr float kAtk[3] = { 0.06f, 0.025f, 0.01f }, kFall[3] = { 20.0f, 44.0f, 90.0f };   // lenta / media / rapida
+    static constexpr float kAtk[3] = { 0.10f, 0.05f, 0.02f }, kFall[3] = { 16.0f, 30.0f, 66.0f };   // lenta / media / rapida (fluido, sin temblor)
     const float attack = 1.0f - std::pow (0.4f, dt / kAtk[opts.speed]);
     const float fall = kFall[opts.speed] * dt;
     float top = -140.0f;
@@ -259,35 +266,64 @@ bool SpectrumDisplay::updateAnalyzer (Analyzer& an, AnalyzerFifo& fifo, float dt
 
     auto a = plotArea();
     const double fs = proc.currentSampleRate.load();
-    std::vector<juce::Point<float>> pts;
-    pts.reserve ((size_t) (a.getWidth() / 3.0f) + 4);
-    for (float x = a.getX(); x <= a.getRight() + 3.0f; x += 3.0f)
+    const int K = kFftSize / 2;
+    // 1) Un valor cada 2 px: el mas alto de +-1/48 de octava (no se pierde el nivel real de un tono);
+    //    en los graves, donde hay menos de 2 lineas de la FFT por punto, interpolacion cubica (sin esquinas)
+    constexpr float step = 2.0f;
+    std::vector<float> dbs;
+    dbs.reserve ((size_t) (a.getWidth() / step) + 4);
+    auto cubicAt = [&] (double kf)
     {
-        const double f0 = xToFreq (x), f1 = xToFreq (x + 3.0f);
-        int k0 = (int) std::floor (f0 * kFftSize / fs), k1 = (int) std::ceil (f1 * kFftSize / fs);
-        k0 = juce::jlimit (1, kFftSize / 2, k0);
-        k1 = juce::jlimit (k0, kFftSize / 2, k1);
-        float db = -140.0f;
-        if (k1 - k0 <= 1)
-        {
-            const double kf = f0 * kFftSize / fs;
-            const int ka = juce::jlimit (1, kFftSize / 2 - 1, (int) kf);
-            const float tt = (float) juce::jlimit (0.0, 1.0, kf - ka);
-            db = an.smoothed[(size_t) ka] + tt * (an.smoothed[(size_t) ka + 1] - an.smoothed[(size_t) ka]);
-        }
-        else
-        {
-            for (int k = k0; k <= k1; ++k) db = juce::jmax (db, an.smoothed[(size_t) k]);
-        }
-        pts.push_back ({ x, analyzerDbToY (db) });
+        const int k1 = juce::jlimit (1, K - 2, (int) kf);
+        const float t = (float) juce::jlimit (0.0, 1.0, kf - k1);
+        const float y0 = an.smoothed[(size_t) juce::jmax (1, k1 - 1)], y1 = an.smoothed[(size_t) k1],
+                    y2 = an.smoothed[(size_t) k1 + 1], y3 = an.smoothed[(size_t) juce::jmin (K, k1 + 2)];
+        return y1 + 0.5f * t * (y2 - y0 + t * (2.0f * y0 - 5.0f * y1 + 4.0f * y2 - y3 + t * (3.0f * (y1 - y2) + y3 - y0)));
+    };
+    for (float x = a.getX(); x <= a.getRight() + step; x += step)
+    {
+        const double kf = xToFreq (x) * kFftSize / fs;
+        const int k0 = juce::jlimit (1, K, (int) std::floor (kf * 0.98566)), k1 = juce::jlimit (k0, K, (int) std::ceil (kf * 1.01455));
+        float db;
+        if (k1 - k0 <= 2) db = cubicAt (kf);
+        else { db = -140.0f; for (int k = k0; k <= k1; ++k) db = juce::jmax (db, an.smoothed[(size_t) k]); }
+        dbs.push_back (db);
     }
-    // Polilinea (a 3 px se ve igual que una curva y tiene muchos menos bordes que rasterizar)
+    // 2) Suavizado gaussiano de ~1/30 de octava: quita el "serrucho" sin mover los picos de su frecuencia
+    //    (es simetrico: el maximo queda en el mismo lugar)
+    {
+        const float pxPerOct = freqToX (2000.0) - freqToX (1000.0);
+        const float sigma = juce::jmax (0.6f, pxPerOct / 30.0f / step);
+        const int R = juce::jmin (12, (int) std::ceil (sigma * 2.5f));
+        float w[32];
+        for (int j = 0; j <= R; ++j) w[j] = std::exp (-0.5f * (float) (j * j) / (sigma * sigma));
+        std::vector<float> out (dbs.size());
+        const int N = (int) dbs.size();
+        for (int i = 0; i < N; ++i)
+        {
+            float acc = dbs[(size_t) i] * w[0], ws = w[0];
+            for (int j = 1; j <= R; ++j)
+            {
+                if (i - j >= 0) { acc += dbs[(size_t) (i - j)] * w[j]; ws += w[j]; }
+                if (i + j < N)  { acc += dbs[(size_t) (i + j)] * w[j]; ws += w[j]; }
+            }
+            out[(size_t) i] = acc / ws;
+        }
+        dbs.swap (out);
+    }
+    // 3) Trazo curvo (cuadraticas por los puntos medios): fluido, sin quiebres
     an.outline.clear();
-    an.outline.preallocateSpace ((int) pts.size() * 3 + 12);
-    an.outline.startNewSubPath (pts.front());
-    for (size_t i = 1; i < pts.size(); ++i) an.outline.lineTo (pts[i]);
+    an.outline.preallocateSpace ((int) dbs.size() * 5 + 12);
+    auto P = [&] (size_t i) { return juce::Point<float> (a.getX() + (float) i * step, analyzerDbToY (dbs[i])); };
+    an.outline.startNewSubPath (P (0));
+    for (size_t i = 1; i + 1 < dbs.size(); ++i)
+    {
+        const auto p = P (i), q = P (i + 1);
+        an.outline.quadraticTo (p, (p + q) * 0.5f);
+    }
+    an.outline.lineTo (P (dbs.size() - 1));
     an.fill = an.outline;
-    an.fill.lineTo (a.getRight() + 3.0f, a.getBottom());
+    an.fill.lineTo (a.getRight() + step, a.getBottom());
     an.fill.lineTo (a.getX(), a.getBottom());
     an.fill.closeSubPath();
     return true;
@@ -883,6 +919,16 @@ void SpectrumDisplay::paint (juce::Graphics& g)
     }
 
     if (! vintageMode) { paintClash (g, a); paintPeaks (g, a); paintSketch (g, a); }
+    if (hoverFrozen && post.visible && ! opts.freeze)
+    {
+        // aviso discreto: el espectro esta en pausa mientras el mouse esta encima
+        auto pill = juce::Rectangle<float> (64.0f, 18.0f).withPosition (a.getCentreX() + 118.0f, a.getY() + 10.0f);
+        g.setColour (Colours::glass.withAlpha (0.75f));
+        g.fillRoundedRectangle (pill, 9.0f);
+        g.setColour (Colours::textDim.withAlpha (0.9f));
+        g.setFont (monoFont (9.0f));
+        g.drawText ("PAUSA", pill, juce::Justification::centred);
+    }
     if (! lasso.isEmpty())
     {
         g.setColour (Colours::accent.withAlpha (0.07f));
@@ -1739,9 +1785,26 @@ bool SpectrumDisplay::detectPeaks (float dt)
         p.db = x; p.prom = prom; p.alive = true;
         found.push_back (p);
     }
-    // los 8 que mas sobresalen
+    // Solo los que valen la pena: los 5 que mas sobresalen, separados al menos 1/3 de octava entre si,
+    // y no donde ya hay una banda puesta (asi no se apilan bandas sobre la misma resonancia)
     std::sort (found.begin(), found.end(), [] (const GrabPeak& a, const GrabPeak& b) { return a.prom > b.prom; });
-    if (found.size() > 8) found.resize (8);
+    {
+        std::vector<GrabPeak> keep;
+        for (auto& c : found)
+        {
+            if (c.prom < 7.0f) continue;
+            bool ok = true;
+            for (auto& k : keep) if (std::abs (std::log2 (k.f / c.f)) < 1.0 / 3.0) { ok = false; break; }
+            for (int b = 0; b < kNumBands && ok; ++b)
+            {
+                const auto& bp = proc.params.bands[(size_t) b];
+                if (bp.on->load() > 0.5f && std::abs (std::log2 (bp.freq->load() / c.f)) < 1.0 / 8.0) ok = false;
+            }
+            if (ok) keep.push_back (c);
+            if (keep.size() >= 5) break;
+        }
+        found.swap (keep);
+    }
     // seguir a los que ya estaban (misma frecuencia +-1/12 oct): se mueven suave, no parpadean
     for (auto& p : peaks) p.alive = false;
     for (auto& nf : found)
@@ -1798,19 +1861,23 @@ void SpectrumDisplay::paintPeaks (juce::Graphics& g, juce::Rectangle<float> a)
         const bool hov = (int) i == hoverPeak;
         const auto m = peakMarker (p);
         if (! a.contains (m)) continue;
-        // "colmillo": un triangulo que apunta al pico, mas intenso cuanto mas sobresale
-        const float strength = juce::jlimit (0.35f, 1.0f, (p.prom - 4.0f) / 10.0f);
-        const float s = hov ? 6.5f : 4.5f;
-        juce::Path t;
-        t.addTriangle (m.x - s, m.y - s * 0.9f, m.x + s, m.y - s * 0.9f, m.x, m.y + s * 0.9f);
-        const auto c = Colours::accent.interpolatedWith (juce::Colours::white, hov ? 0.35f : 0.0f);
-        g.setColour (c.withAlpha (p.alpha * strength * (hov ? 1.0f : 0.75f)));
-        g.fillPath (t);
+        // Marca suave: un punto con halo justo sobre el pico (exactamente en su frecuencia),
+        // mas intenso cuanto mas sobresale
+        const float strength = juce::jlimit (0.45f, 1.0f, (p.prom - 4.0f) / 10.0f);
+        const auto c = Colours::accent.interpolatedWith (juce::Colours::white, hov ? 0.45f : 0.15f);
+        const juce::Point<float> tip (m.x, m.y + 12.0f);   // el pico mismo
+        const float r = hov ? 5.5f : 4.0f;
+        g.setColour (c.withAlpha (p.alpha * 0.16f * strength));
+        g.fillEllipse (juce::Rectangle<float> (r * 4.0f, r * 4.0f).withCentre (m));
+        g.setColour (c.withAlpha (p.alpha * 0.35f * strength));
+        g.fillRect (juce::Rectangle<float> (m.x - 0.5f, m.y + r, 1.0f, juce::jmax (0.0f, tip.y - m.y - r)));
+        g.setColour (Colours::ink.withAlpha (0.85f * p.alpha));
+        g.fillEllipse (juce::Rectangle<float> (r * 2.0f, r * 2.0f).withCentre (m));
+        g.setColour (c.withAlpha (p.alpha * strength));
+        g.drawEllipse (juce::Rectangle<float> (r * 2.0f, r * 2.0f).withCentre (m), hov ? 1.8f : 1.4f);
+        g.fillEllipse (juce::Rectangle<float> (3.0f, 3.0f).withCentre (m));
         if (hov)
         {
-            // guia vertical hasta el pico y etiqueta con la nota
-            g.setColour (c.withAlpha (0.5f * p.alpha));
-            g.drawEllipse (m.x - 4.0f, m.y + 8.0f, 8.0f, 8.0f, 1.2f);
             const auto txt = fmtFreq (p.f) + "  " + noteName (p.f) + "  +" + juce::String (p.prom, 1) + " dB";
             g.setFont (monoFont (10.0f));
             const float w = 150.0f;

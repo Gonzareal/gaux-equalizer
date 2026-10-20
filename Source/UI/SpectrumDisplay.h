@@ -169,6 +169,7 @@ private:
     float fpsAcc = 0;
     int lastMatchVersion = -1;
     bool lastDirty = false;
+    bool hoverFrozen = false;   // con el mouse quieto sobre la pantalla el espectro y los picos se congelan
     static inline bool showFps = false;   // clic derecho en la pantalla vacia   // reloj de las animaciones (se congela en silencio: sin audio no se gasta CPU)
     // Capas en cache (fondo, resplandor, grilla, degradado del analizador)
     LayerCache bgLayer, glowLayer, glassLayer;

@@ -65,6 +65,21 @@ jobs:
           bash .github/scripts/pluginval_mac.sh "/Library/Audio/Plug-Ins/VST3/Gaux Equalizer.vst3" vst3 --strictness-level 10 --skip-gui-tests --timeout-ms 300000 --sample-rates 44100,96000 --block-sizes 64,1024
           bash .github/scripts/pluginval_mac.sh "/Library/Audio/Plug-Ins/Components/Gaux Equalizer.component" au --strictness-level 10 --skip-gui-tests --timeout-ms 300000 --sample-rates 48000 --block-sizes 512
 
+      # El ultimo instalador validado queda tambien en la rama "instalador-mac" (un solo commit, se reemplaza
+      # cada vez): asi se puede bajar con un link directo, sin entrar a GitHub
+      - name: Publicar el instalador en la rama instalador-mac
+        if: github.ref == 'refs/heads/main'
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir pub && cp dist/*.zip pub/GauxEQ_Mac.zip
+          echo "$GITHUB_SHA" > pub/COMMIT.txt
+          date -u '+%Y-%m-%d %H:%M UTC' > pub/FECHA.txt
+          cd pub
+          git init -q && git checkout -q -b instalador-mac
+          git add . && git -c user.name="Gaux CI" -c user.email="ci@gaux.local" commit -qm "Instalador Mac ${GITHUB_SHA::7}"
+          git push -fq "https://x-access-token:${TOKEN}@github.com/${GITHUB_REPOSITORY}.git" instalador-mac
+
   windows:
     name: Windows (x64)
     runs-on: windows-2022

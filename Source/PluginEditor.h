@@ -221,6 +221,8 @@ public:
     void selectBand (int b);
     void setAdvanced (bool open);
     gaux::Mascot& getMascot() { return mascot; }
+    // 100 % = kBaseScale del diseno (cabe en la pantalla de un MacBook, tambien con AVANZADO abierto)
+    static constexpr float kBaseScale = 0.88f;
     void setScaleLabel (int percent) { scaleChip.setButtonText (juce::String (percent) + "%"); scaleChip.repaint(); }
 
     std::function<void()> onDesignSizeChanged;

@@ -258,7 +258,7 @@ void MainView::showScaleMenu()
     juce::Component::SafePointer<MainView> safe (this);
     m.showMenuAsync (juce::PopupMenu::Options().withTargetComponent (&scaleChip), [safe] (int r)
     {
-        if (safe != nullptr && r > 0 && safe->onScaleRequested) safe->onScaleRequested ((float) r / 100.0f);
+        if (safe != nullptr && r > 0 && safe->onScaleRequested) safe->onScaleRequested ((float) r / 100.0f * kBaseScale);
     });
 }
 
@@ -508,7 +508,8 @@ void MainView::resized()
 GauxEqEditor::GauxEqEditor (GauxEqProcessor& p) : AudioProcessorEditor (&p), proc (p), view (p)
 {
     proc.uiActive.fetch_add (1);   // con la ventana abierta se calculan medidores, analizador y calavera
-    uiScale = juce::jlimit (0.5f, 2.0f, (float) (double) p.apvts.state.getProperty ("uiScale", 0.85));
+    // "uiZoom" es el % que ve el usuario (1.0 = 100 %); el tamano real es uiZoom * kBaseScale
+    uiScale = juce::jlimit (0.5f, 2.0f, (float) (double) p.apvts.state.getProperty ("uiZoom", 1.0) * MainView::kBaseScale);
     view.onDesignSizeChanged = [this] { designSizeChanged(); };
     view.onScaleRequested = [this] (float s) { setUiScale (s); };
     addAndMakeVisible (view);
@@ -544,6 +545,6 @@ void GauxEqEditor::resized()
     uiScale = s;
     view.setTopLeftPosition (0, 0);
     view.setTransform (juce::AffineTransform::scale (s));
-    view.setScaleLabel (juce::roundToInt (s * 100.0f));
-    proc.apvts.state.setProperty ("uiScale", (double) s, nullptr);
+    view.setScaleLabel (juce::roundToInt (s / MainView::kBaseScale * 100.0f));
+    proc.apvts.state.setProperty ("uiZoom", (double) (s / MainView::kBaseScale), nullptr);
 }
