@@ -78,7 +78,14 @@ public:
     explicit BandEditor (GauxEqProcessor& p) : proc (p)
     {
         addAndMakeVisible (power);
-        power.setTooltip ("Encender / apagar la banda");
+        power.setTooltip ("Bypass de la banda (sigue puesta, en gris, pero no suena)  -  tecla 0: todas las elegidas");
+        power.setClickingTogglesState (false);
+        power.onClick = [this]
+        {
+            setParamValue (proc.apvts, ParamID::band (band, "byp"), proc.params.bands[(size_t) band].byp->load() > 0.5f ? 0.0f : 1.0f);
+            proc.history.commit();
+            refresh();
+        };
 
         for (int t = 0; t < kNumBandTypes; ++t)
         {
@@ -167,8 +174,6 @@ public:
         band = b;
         lastPaintKey.clear();
         auto& s = proc.apvts;
-        powerAttachment.reset();
-        powerAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ButtonAttachment> (s, ParamID::band (b, "on"), power);
         freq.attach (s, ParamID::band (b, "freq"));
         gain.attach (s, ParamID::band (b, "gain"));
         q.attach (s, ParamID::band (b, "q"));
@@ -375,6 +380,10 @@ private:
     void refresh()
     {
         const auto s = proc.params.bandRaw (band);
+        {
+            const bool lit = ! proc.params.isBypassed (band);
+            if (power.getToggleState() != lit) power.setToggleState (lit, juce::dontSendNotification);
+        }
         for (auto* t : typeButtons) { const bool sel = t->type == s.type; if (t->selected != sel) { t->selected = sel; t->repaint(); } }
 
         const bool hasSlope = typeHasSlope (s.type);
@@ -446,7 +455,6 @@ private:
     GauxEqProcessor& proc;
     int band = 0;
     PowerButton power;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> powerAttachment;
     juce::OwnedArray<FilterTypeButton> typeButtons;
     juce::OwnedArray<Chip> slopeChips, satChips, stereoChips;
     Chip dynChip { "DYNAMIC" }, autoChip { "AUTO" }, extChip { "EXT" }, specChip { "SPECTRAL" };

@@ -163,6 +163,7 @@ void GauxEqProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
     autoGainSmooth.reset (sampleRate, 0.25);
     autoGainSmooth.setCurrentAndTargetValue (1.0f);
     for (auto& st : listenStates) st.reset();
+    listenActive = -1; listenMix = 0.0;
     outputGain.reset (sampleRate, 0.05);
     outputGain.setCurrentAndTargetValue (juce::Decibels::decibelsToGain (params.output->load()));
 
@@ -223,6 +224,7 @@ int GauxEqProcessor::applyFittedBands (const std::vector<gaux::BandSettings>& ba
         set (ParamID::band (b, "drive"), 0.0f);
         set (ParamID::band (b, "dyn"), 0.0f);
         set (ParamID::band (b, "spec"), 0.0f);
+        set (gaux::ParamID::band (b, "byp"), 0.0f);
         set (gaux::ParamID::band (b, "on"), 1.0f);
         ++placed;
     }
@@ -237,7 +239,7 @@ bool GauxEqProcessor::wantsSpectral() const
     for (int b = 0; b < gaux::kNumBands; ++b)
     {
         const auto& p = params.bands[(size_t) b];
-        if (p.on->load() > 0.5f && p.dyn->load() > 0.5f && p.spec->load() > 0.5f && gaux::typeCanBeDynamic ((int) p.type->load()))
+        if (p.on->load() > 0.5f && p.byp->load() < 0.5f && p.dyn->load() > 0.5f && p.spec->load() > 0.5f && gaux::typeCanBeDynamic ((int) p.type->load()))
             return true;
     }
     return false;
@@ -791,7 +793,7 @@ void GauxEqProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
         {
             gaux::SpectralBand sb;
             const auto& p = params.bands[(size_t) b];
-            if (p.spec->load() > 0.5f && p.on->load() > 0.5f && p.dyn->load() > 0.5f)
+            if (p.spec->load() > 0.5f && p.on->load() > 0.5f && p.byp->load() < 0.5f && p.dyn->load() > 0.5f)
             {
                 const auto s = params.band (b);
                 if (gaux::typeCanBeDynamic (s.type))
@@ -819,15 +821,36 @@ void GauxEqProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
 
     // Solo de banda (solo en modo parametrico)
     const int solo = vintageMode ? -1 : soloBand.load();
-    if (solo != lastSolo) { for (auto& st : listenStates) st.reset(); lastSolo = solo; }
-    if (solo >= 0 && solo < gaux::kNumBands)
+    // Fundido de ~12 ms al entrar/salir del solo o cambiar de banda: primero baja a la mezcla normal,
+    // cambia de banda con el filtro limpio y vuelve a subir (asi no hay clics)
+    const int soloTarget = (solo >= 0 && solo < gaux::kNumBands) ? solo : -1;
+    if (listenActive != soloTarget && listenMix <= 0.0)
     {
-        const auto c = gaux::designListen (params.band (solo), currentSampleRate.load());
-        for (int ch = 0; ch < numChannels; ++ch)
+        listenActive = soloTarget;
+        for (auto& st : listenStates) st.reset();
+    }
+    if (listenActive >= 0)
+    {
+        const double step = 1.0 / (0.012 * currentSampleRate.load());
+        const double goal = listenActive == soloTarget ? 1.0 : 0.0;
+        const auto c = gaux::designListen (params.band (listenActive), currentSampleRate.load());
+        double m = listenMix;
+        for (int i = 0; i < numSamples; ++i)
         {
-            float* d = buf.getWritePointer (ch);
-            for (int i = 0; i < numSamples; ++i)
-                d[i] = (float) listenStates[(size_t) ch].process (d[i], c);
+            m = goal > m ? std::min (goal, m + step) : std::max (goal, m - step);
+            const double w = m * m * (3.0 - 2.0 * m);   // curva suave (sin esquinas)
+            for (int ch = 0; ch < numChannels; ++ch)
+            {
+                float* d = buf.getWritePointer (ch);
+                const double x = d[i], y = listenStates[(size_t) ch].process (x, c);
+                d[i] = (float) (x + w * (y - x));
+            }
+        }
+        listenMix = m;
+        if (listenMix <= 0.0 && listenActive != soloTarget)
+        {
+            listenActive = soloTarget;
+            for (auto& st : listenStates) st.reset();
         }
     }
 
@@ -843,7 +866,7 @@ void GauxEqProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
         sig[(size_t) k++] = (float) currentSampleRate.load();
         sig[(size_t) k++] = params.gainScale->load();
         for (const auto& bp : params.bands)
-            for (auto* a : { bp.on, bp.type, bp.freq, bp.gain, bp.q, bp.slope }) sig[(size_t) k++] = a->load();
+            for (auto* a : { bp.on, bp.type, bp.freq, bp.gain, bp.q, bp.slope, bp.byp }) sig[(size_t) k++] = a->load();
         for (auto* a : { params.vLowFreq, params.vLowBoost, params.vLowAtten, params.vHighFreq, params.vHighBoost, params.vHighBw,
                          params.vAttenFreq, params.vHighAtten, params.vAirFreq, params.vAirGain, params.vLmFreq, params.vLmBoost,
                          params.vDipFreq, params.vDip, params.vHmFreq, params.vHmBoost, params.vLowCut, params.vHighCut,

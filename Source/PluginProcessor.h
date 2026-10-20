@@ -179,7 +179,8 @@ private:
     juce::AudioBuffer<float> dryDelay;          // senal original retrasada (bypass alineado con la latencia)
     int dryDelayMask = 0, dryDelayWrite = 0, dryBlockStart = 0;
     std::array<gaux::BiquadState, 2> listenStates {};
-    int lastSolo = -1;
+    int listenActive = -1;      // banda que suena en solo ahora (cambia solo con el fundido en 0)
+    double listenMix = 0.0;     // 0 = mezcla normal, 1 = solo de la banda (fundido de ~12 ms: sin clics)
     float clipHold = 0.0f;
     juce::HeapBlock<float> monoBuffer, duckBuf;
     float qualityFade = 1.0f; int qualityFadeDir = 0, pendingQuality = -1;   // cambio de calidad sin clic
@@ -203,7 +204,7 @@ private:
     std::atomic<bool> truePeakReset { false };
     void prepareTruePeak();
     float measureTruePeak (const float* const* ch, int numChannels, int n);
-    static constexpr int kAgSigSize = 3 + gaux::kNumBands * 6 + 21;
+    static constexpr int kAgSigSize = 3 + gaux::kNumBands * 7 + 21;
     std::array<float, kAgSigSize> agSig {};
     bool agValid = false; float agCachedDb = 0.0f;
     float lastOutPeak = 1.0f;

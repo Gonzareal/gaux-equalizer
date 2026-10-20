@@ -134,6 +134,7 @@ private:
     int hitTestZone (juce::Point<float> p) const;   // 0 = ninguno, 1 = LO, 2 = HI
     void paintZone (juce::Graphics&, juce::Rectangle<float>);
     juce::Colour colourOf (int band) const;
+    void toggleBypassSelection();
 
     juce::RangedAudioParameter* param (int band, const char* name) const;
     void setParam (juce::RangedAudioParameter* p, float value);

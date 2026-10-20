@@ -422,6 +422,11 @@ int main (int argc, char** argv)
         editor->selectBand (3);
         for (int i = 0; i < 25; ++i) { processNoise (p, 4, peak, ms); juce::MessageManager::getInstance()->runDispatchLoopUntil (30); pumpFrames (*ed); }
         snapshot (*editor, outDir + "/gaux_parametrico.png");
+        // Bypass (tecla 0): las bandas 2 y 5 quedan en gris y fuera de la curva
+        setP (p, ParamID::band (1, "byp"), 1); setP (p, ParamID::band (4, "byp"), 1);
+        for (int i = 0; i < 10; ++i) { processNoise (p, 4, peak, ms); juce::MessageManager::getInstance()->runDispatchLoopUntil (30); pumpFrames (*ed); }
+        snapshot (*editor, outDir + "/gaux_bypass.png");
+        setP (p, ParamID::band (1, "byp"), 0); setP (p, ParamID::band (4, "byp"), 0);
 
         // Filtros nuevos: high cut 72 dB/oct seleccionado, band pass, tilt y bandas 17-24
         setP (p, ParamID::band (7, "slope"), 6);

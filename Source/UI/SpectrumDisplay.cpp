@@ -770,9 +770,10 @@ void SpectrumDisplay::paint (juce::Graphics& g)
     for (int b = 0; b < kNumBands; ++b)
     {
         const auto& s = bs[(size_t) b];
-        if (! s.on) continue;
+        const bool byp = proc.params.isBypassed (b);   // en bypass: el punto queda en gris, sin curva
+        if (! s.on && ! byp) continue;
         const auto pos = nodePosition (b);
-        const auto col = colourOf (b);
+        const auto col = byp ? juce::Colour (0xff8a8086) : colourOf (b);
         const bool sel = b == selectedBand;
         const bool hot = sel || b == hoverBand || b == dragBand;
 
@@ -783,10 +784,10 @@ void SpectrumDisplay::paint (juce::Graphics& g)
             g.setColour (Colours::dynamic.withAlpha (0.6f));
             g.drawEllipse (juce::Rectangle<float> (12.0f, 12.0f).withCentre ({ pos.x, yStatic }), 1.2f);
         }
-        g.setOpacity (soloing >= 0 && soloing != b ? 0.3f : 1.0f);
+        g.setOpacity (soloing >= 0 && soloing != b ? 0.3f : (byp ? 0.6f : 1.0f));
 
         // Anillo de brasa si la banda satura (late suavemente)
-        if (typeCanSaturate (s.type) && s.driveDb > 0.01)
+        if (! byp && typeCanSaturate (s.type) && s.driveDb > 0.01)
         {
             const float amt = (float) (s.driveDb / 36.0) * (float) s.mix;
             const float pulse = 0.5f + 0.5f * (float) std::sin (t * 4.0 + b);
@@ -1178,6 +1179,7 @@ int SpectrumDisplay::createBandAt (juce::Point<float> p)
         set (param (nb, "q"), type == (int) BandType::Bell ? 1.0f : 0.707f);
         set (param (nb, "dyn"), 0.0f);
         set (param (nb, "drive"), 0.0f);
+        set (param (nb, "byp"), 0.0f);
         set (param (nb, "on"), 1.0f);
         return nb;
     }
@@ -1510,6 +1512,7 @@ void SpectrumDisplay::showBandMenu (int band)
     m.addSeparator();
     m.addItem (1, "Ganancia a 0 dB");
     m.addItem (2, "Quitar saturacion");
+    m.addItem (4, proc.params.isBypassed (band) ? "Quitar bypass  (0)" : "Bypass  (0)");
     m.addItem (3, "Borrar banda");
 
     juce::Component::SafePointer<SpectrumDisplay> safe (this);
@@ -1525,6 +1528,7 @@ void SpectrumDisplay::showBandMenu (int band)
         else if (r == 1) set ("gain", 0.0f);
         else if (r == 2) set ("drive", 0.0f);
         else if (r == 3) set ("on", 0.0f);
+        else if (r == 4) set ("byp", safe->proc.params.isBypassed (band) ? 0.0f : 1.0f);
     });
 }
 
@@ -2000,6 +2004,7 @@ void SpectrumDisplay::openClashSpace (const ClashZone& z)
         set (param (nb, "gain"), -(2.0f + 2.0f * z.strength) / scale);
         set (param (nb, "q"), (float) q);
         set (param (nb, "dyn"), 0.0f); set (param (nb, "drive"), 0.0f); set (param (nb, "stereo"), 0.0f);
+        set (param (nb, "byp"), 0.0f);
         set (param (nb, "on"), 1.0f);
         proc.history.commit();
         bursts.push_back ({ nodePosition (nb), clashColour, 0.0f });
@@ -2109,6 +2114,25 @@ void SpectrumDisplay::selectAll()
     repaint();
 }
 
+void SpectrumDisplay::toggleBypassSelection()
+{
+    // Si alguna de las elegidas suena, se ponen todas en bypass; si todas estaban en bypass, vuelven a sonar
+    std::vector<int> sel;
+    for (int k = 0; k < kNumBands; ++k)
+        if ((multiSel[(size_t) k] || k == selectedBand) && proc.params.bands[(size_t) k].on->load() > 0.5f) sel.push_back (k);
+    if (sel.empty()) return;
+    bool anyActive = false;
+    for (int k : sel) anyActive = anyActive || ! proc.params.isBypassed (k);
+    for (int k : sel)
+    {
+        auto* p = param (k, "byp");
+        p->beginChangeGesture(); setParam (p, anyActive ? 1.0f : 0.0f); p->endChangeGesture();
+    }
+    if (anyActive && proc.soloBand.load() >= 0 && proc.params.isBypassed (proc.soloBand.load())) proc.soloBand.store (-1);
+    proc.history.commit();
+    repaint();
+}
+
 void SpectrumDisplay::deleteSelection()
 {
     bool any = false;
@@ -2136,6 +2160,8 @@ bool SpectrumDisplay::keyPressed (const juce::KeyPress& k)
         repaint();
         return ok;
     }
+    // 0: bypass de las bandas elegidas (todas juntas): para comparar con y sin ellas
+    if (! k.getModifiers().isAnyModifierKeyDown() && (k.getKeyCode() == '0' || k.getKeyCode() == juce::KeyPress::numberPad0)) { toggleBypassSelection(); return true; }
     if (k.getKeyCode() == juce::KeyPress::escapeKey) { multiSel.fill (false); if (sketchMode) setSketchMode (false); repaint(); return true; }
     return false;
 }

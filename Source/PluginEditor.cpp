@@ -312,8 +312,9 @@ void MainView::timerCallback()
         const auto& br = proc.params.bands[(size_t) c->band];
         const int st = (int) br.stereo->load();
         const bool dy = br.dyn->load() > 0.5f && typeCanBeDynamic ((int) br.type->load());
-        if (c->on != bOn || c->selected != sel || c->stereo != st || c->dyn != dy)
-        { c->on = bOn; c->selected = sel; c->stereo = st; c->dyn = dy; c->repaint(); }
+        const bool by = proc.params.isBypassed (c->band);
+        if (c->on != bOn || c->selected != sel || c->stereo != st || c->dyn != dy || c->bypassed != by)
+        { c->on = bOn; c->selected = sel; c->stereo = st; c->dyn = dy; c->bypassed = by; c->repaint(); }
 
     }
 }
@@ -398,7 +399,7 @@ void MainView::paint (juce::Graphics& g)
             g.setColour (Colours::textDim.withAlpha (0.7f));
             g.drawText ("Arrastra para mover  -  Shift: ajuste fino  -  Rueda: Q  -  Alt + clic: solo  -  X o doble clic en el punto: borrar",
                         st.translated (0, 24), juce::Justification::centred);
-            g.drawText ("Shift + clic o un recuadro: varias bandas a la vez (Supr las borra)  -  Cmd+C / Cmd+V: copiar y pegar la curva  -  Clic derecho: opciones",
+            g.drawText ("Shift + clic o un recuadro: varias bandas a la vez (Supr las borra, 0 bypass)  -  Cmd+C / Cmd+V: copiar y pegar la curva  -  Clic derecho: opciones",
                         st.translated (0, 44), juce::Justification::centred);
         }
     }

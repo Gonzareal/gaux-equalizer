@@ -207,6 +207,8 @@ inline juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout
         auto group = std::make_unique<AudioProcessorParameterGroup> ("band" + String (b + 1), n.trim(), "|");
 
         group->addChild (std::make_unique<GauxBoolParameter> (ParameterID { ParamID::band (b, "on"), version }, n + "On", false));
+        // Bypass: la banda sigue puesta (se ve en gris) pero no suena; tecla 0 con varias bandas elegidas
+        group->addChild (std::make_unique<GauxBoolParameter> (ParameterID { ParamID::band (b, "byp"), version }, n + "Bypass", false));
         group->addChild (std::make_unique<GauxChoiceParameter> (ParameterID { ParamID::band (b, "type"), version }, n + "Tipo",
                                                                  toStringArray (kBandTypeNames, kNumBandTypes), defaultType (b)));
         group->addChild (std::make_unique<AudioParameterFloat> (ParameterID { ParamID::band (b, "freq"), version }, n + "Freq",
@@ -311,7 +313,7 @@ struct ParamRefs
     std::atomic<float> *scOn = nullptr, *scDuck = nullptr, *scThr = nullptr, *scRel = nullptr, *phase = nullptr;
 
     struct Band { std::atomic<float> *on, *type, *freq, *gain, *q, *slope, *satType, *drive, *mix,
-                                     *stereo, *dyn, *thr, *range, *atk, *rel, *autoThr, *ext, *spec; };
+                                     *stereo, *dyn, *thr, *range, *atk, *rel, *autoThr, *ext, *spec, *byp; };
     std::array<Band, kNumBands> bands {};
 
     std::atomic<float> *vLowFreq, *vLowBoost, *vLowAtten, *vHighFreq, *vHighBoost, *vHighBw,
@@ -333,7 +335,8 @@ struct ParamRefs
                                   get (ParamID::band (b, "satType")), get (ParamID::band (b, "drive")), get (ParamID::band (b, "mix")),
                                   get (ParamID::band (b, "stereo")), get (ParamID::band (b, "dyn")), get (ParamID::band (b, "thr")),
                                   get (ParamID::band (b, "range")), get (ParamID::band (b, "atk")), get (ParamID::band (b, "rel")),
-                                  get (ParamID::band (b, "autoThr")), get (ParamID::band (b, "ext")), get (ParamID::band (b, "spec")) };
+                                  get (ParamID::band (b, "autoThr")), get (ParamID::band (b, "ext")), get (ParamID::band (b, "spec")),
+                                  get (ParamID::band (b, "byp")) };
         vLowFreq = get (ParamID::vLowFreq); vLowBoost = get (ParamID::vLowBoost); vLowAtten = get (ParamID::vLowAtten);
         vHighFreq = get (ParamID::vHighFreq); vHighBoost = get (ParamID::vHighBoost); vHighBw = get (ParamID::vHighBw);
         vAttenFreq = get (ParamID::vAttenFreq); vHighAtten = get (ParamID::vHighAtten);
@@ -344,6 +347,9 @@ struct ParamRefs
         vProgramIn = get (ParamID::vProgramIn); vMidIn = get (ParamID::vMidIn); vFilterIn = get (ParamID::vFilterIn);
     }
 
+    // Banda puesta pero en bypass (la interfaz la muestra en gris)
+    bool isBypassed (int b) const { const auto& p = bands[(size_t) b]; return p.on->load() > 0.5f && p.byp->load() > 0.5f; }
+
     // Ganancia tal como la ve el usuario (sin Gain Scale), util para la interfaz
     BandSettings bandRaw (int b) const { return band (b, false); }
 
@@ -352,7 +358,7 @@ struct ParamRefs
         const auto& p = bands[(size_t) b];
         const double scale = applyScale ? gainScale->load() / 100.0 : 1.0;
         BandSettings s;
-        s.on = p.on->load() > 0.5f;
+        s.on = p.on->load() > 0.5f && p.byp->load() < 0.5f;   // en bypass no suena
         s.type = (int) p.type->load();
         s.freq = p.freq->load();
         s.gainDb = p.gain->load() * scale;

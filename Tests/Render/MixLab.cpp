@@ -3494,6 +3494,59 @@ static void benchTests()
 // sesiones viejas, hilos en paralelo y una sesion larga
 static Band spectral (Band b) { b.spec = true; return b; }
 
+// Bypass por banda (tecla 0) y solo sin clics
+static void bypassSoloTests()
+{
+    if (gFilter.isNotEmpty() && ! juce::String ("bypass solo").contains (gFilter)) return;
+    std::cout << "\n== BYPASS DE BANDAS Y SOLO SIN CLICS ==" << std::endl;
+    using namespace ParamID;
+    const double fs = 48000.0; const int bs = 256;
+    auto run = [&] (GauxEqProcessor& pr, double f, double amp, int blocks, std::vector<float>* rec, double& ph, std::function<void (int)> each = {})
+    {
+        juce::AudioBuffer<float> b (2, bs); juce::MidiBuffer mb; double pk = 0;
+        for (int k = 0; k < blocks; ++k)
+        {
+            if (each) each (k);
+            for (int i = 0; i < bs; ++i) { const float x = (float) (amp * std::sin (ph)); ph += 2 * juce::MathConstants<double>::pi * f / fs; b.setSample (0, i, x); b.setSample (1, i, x); }
+            pr.processBlock (b, mb);
+            for (int i = 0; i < bs; ++i) { if (rec) rec->push_back (b.getSample (0, i)); if (k >= blocks - 20) pk = std::max (pk, (double) std::abs (b.getSample (0, i))); }
+        }
+        return 20.0 * std::log10 (std::max (1e-9, pk / amp));
+    };
+    {
+        GauxEqProcessor pr; pr.prepareToPlay (fs, bs); double ph = 0;
+        setP (pr, band (0, "on"), 1); setP (pr, band (0, "type"), (float) BandType::Bell); setP (pr, band (0, "freq"), 1000); setP (pr, band (0, "gain"), 12); setP (pr, band (0, "q"), 1);
+        setP (pr, band (1, "on"), 1); setP (pr, band (1, "type"), (float) BandType::Bell); setP (pr, band (1, "freq"), 1000); setP (pr, band (1, "gain"), -6); setP (pr, band (1, "q"), 1);
+        const double both = run (pr, 1000, 0.1, 200, nullptr, ph);
+        setP (pr, band (0, "byp"), 1);
+        const double one = run (pr, 1000, 0.1, 200, nullptr, ph);
+        setP (pr, band (1, "byp"), 1);
+        const double none = run (pr, 1000, 0.1, 200, nullptr, ph);
+        setP (pr, band (0, "byp"), 0); setP (pr, band (1, "byp"), 0);
+        const double back = run (pr, 1000, 0.1, 200, nullptr, ph);
+        const bool stillOn = pr.params.bands[0].on->load() > 0.5f && pr.params.isBypassed (0) == false;
+        report ("Bypass: 2 bandas " + juce::String (both, 2) + " dB, banda 1 en bypass " + juce::String (one, 2) + " dB, las 2 en bypass " + juce::String (none, 2)
+                + " dB, de vuelta " + juce::String (back, 2) + " dB (las bandas siguen puestas)",
+                std::abs (both - 6) < 0.3 && std::abs (one + 6) < 0.3 && std::abs (none) < 0.1 && std::abs (back - both) < 0.05 && stillOn);
+    }
+    {
+        // Solo: se prende, se cambia de banda y se apaga cada ~43 ms sobre un tono grave; no debe haber saltos
+        GauxEqProcessor pr; pr.prepareToPlay (fs, bs); double ph = 0;
+        setP (pr, band (0, "on"), 1); setP (pr, band (0, "type"), (float) BandType::Bell); setP (pr, band (0, "freq"), 110); setP (pr, band (0, "gain"), 3); setP (pr, band (0, "q"), 1);
+        setP (pr, band (1, "on"), 1); setP (pr, band (1, "type"), (float) BandType::Bell); setP (pr, band (1, "freq"), 4000); setP (pr, band (1, "gain"), 3); setP (pr, band (1, "q"), 1);
+        std::vector<float> ref, sol;
+        double ph2 = 0;
+        { GauxEqProcessor r2; r2.prepareToPlay (fs, bs); setP (r2, band (0, "on"), 1); setP (r2, band (0, "type"), (float) BandType::Bell); setP (r2, band (0, "freq"), 110); setP (r2, band (0, "gain"), 3); setP (r2, band (0, "q"), 1);
+          run (r2, 110, 0.5, 400, &ref, ph2); }
+        const int seq[] = { 0, -1, 1, 0, -1, 0, 1, -1 };
+        run (pr, 110, 0.5, 400, &sol, ph, [&] (int k) { if (k % 8 == 0) pr.soloBand.store (seq[(k / 8) % 8]); });
+        auto d2 = [] (const std::vector<float>& v) { double m = 0; for (size_t i = 2000; i < v.size(); ++i) m = std::max (m, (double) std::abs (v[i] - 2 * v[i - 1] + v[i - 2])); return m; };
+        const double base = d2 (ref), got = d2 (sol);
+        report ("Solo sin clics (50 cambios de solo sobre un tono de 110 Hz): salto maximo " + juce::String (got, 6) + " (tono solo " + juce::String (base, 6) + ")",
+                got < base * 4.0 + 2.0e-4);
+    }
+}
+
 static void stressTests()
 {
     if (gFilter == "dbgbrick")
@@ -4228,6 +4281,7 @@ int main (int argc, char** argv)
     cpuTests();
     benchTests();
     stressTests();
+    bypassSoloTests();
     std::cout << "\nRESUMEN: " << gChecks << " comprobaciones, " << gFails << " fallas, " << gWarn << " avisos" << std::endl;
     return gFails == 0 ? 0 : 1;
 }

@@ -96,14 +96,14 @@ class BandChip : public juce::Button
 {
 public:
     explicit BandChip (int b) : juce::Button ("band" + juce::String (b + 1)), band (b) {}
-    bool on = false, selected = false, dyn = false;
+    bool on = false, selected = false, dyn = false, bypassed = false;
     int stereo = 0;
     const int band;
 
     void paintButton (juce::Graphics& g, bool hover, bool) override
     {
         auto r = getLocalBounds().toFloat().reduced (1.0f, 2.0f);
-        const auto col = Colours::bandFor (band, stereo);
+        const auto col = bypassed ? juce::Colour (0xff8a8086) : Colours::bandFor (band, stereo);   // en bypass: gris
         const float rad = 5.0f;
         if (selected)
         {
