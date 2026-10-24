@@ -378,10 +378,10 @@ void MainView::paint (juce::Graphics& g)
         g.setGradientFill (neon);
         g.fillRect (header.withTop (header.getBottom() - 1.5f));
     }
-    Logo::drawRave (g, logoArea, t);
-    g.setFont (labelFont (7.5f).withExtraKerningFactor (0.9f));
+    Logo::drawBrand (g, logoArea, t);   // el GAUX de la marca Aleksander Gaux
+    g.setFont (labelFont (7.0f).withExtraKerningFactor (0.9f));
     g.setColour (Colours::textDim);
-    g.drawText ("EQUALIZER", logoArea.withY (logoArea.getBottom() + 3).withHeight (10).translated (2, 0), juce::Justification::centredLeft);
+    g.drawText ("EQUALIZER", logoArea.withY (logoArea.getBottom() + 1).withHeight (9).translated (logoArea.getWidth() * 0.12f, 0), juce::Justification::centredLeft);
 
     // Franja del panel de banda (fija, como en Pro-Q)
     {
@@ -443,8 +443,8 @@ void MainView::resized()
     auto hl = header.reduced (16, 0);
     power.setBounds (hl.removeFromLeft (44).withSizeKeepingCentre (42, 42));
     hl.removeFromLeft (14);
-    const float logoH = 24.0f;
-    logoArea = juce::Rectangle<float> ((float) hl.getX(), (float) hl.getCentreY() - logoH * 0.5f - 4.0f, Logo::raveWidth (logoH), logoH);
+    const float logoH = 40.0f;
+    logoArea = juce::Rectangle<float> ((float) hl.getX(), (float) hl.getCentreY() - logoH * 0.5f - 5.0f, Logo::brandWidth (logoH), logoH);
     hl.removeFromLeft (juce::roundToInt (logoArea.getWidth()) + 12);
     undoButton.setBounds (hl.removeFromLeft (30).withSizeKeepingCentre (30, 28));
     hl.removeFromLeft (2);

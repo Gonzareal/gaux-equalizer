@@ -422,6 +422,13 @@ int main (int argc, char** argv)
         editor->selectBand (3);
         for (int i = 0; i < 25; ++i) { processNoise (p, 4, peak, ms); juce::MessageManager::getInstance()->runDispatchLoopUntil (30); pumpFrames (*ed); }
         snapshot (*editor, outDir + "/gaux_parametrico.png");
+        if (auto* dg = dynamic_cast<gaux::SpectrumDisplay*> (findById (ed.get(), "display")))
+        {
+            dg->setSpectrumGrab (true);
+            for (int i = 0; i < 12; ++i) { juce::MessageManager::getInstance()->runDispatchLoopUntil (20); pumpFrames (*ed); }
+            snapshot (*editor, outDir + "/gaux_grab.png");
+            dg->setSpectrumGrab (false);
+        }
         // Bypass (tecla 0): las bandas 2 y 5 quedan en gris y fuera de la curva
         setP (p, ParamID::band (1, "byp"), 1); setP (p, ParamID::band (4, "byp"), 1);
         for (int i = 0; i < 10; ++i) { processNoise (p, 4, peak, ms); juce::MessageManager::getInstance()->runDispatchLoopUntil (30); pumpFrames (*ed); }
@@ -656,14 +663,17 @@ int main (int argc, char** argv)
             }
         };
         play (3.0, true);
+        // mouse quieto sobre la pantalla: el espectro se congela y se marcan sus picos (como Spectrum Grab)
+        auto grab = [&] (bool on) { d->setSpectrumGrab (on); d->advanceFrame (1.0f / 60.0f); for (int i = 0; i < 20; ++i) d->advanceFrame (1.0f / 60.0f); };
+        grab (true);
         auto find = [&] (double f) -> const gaux::SpectrumDisplay::GrabPeak*
         {
             for (auto& p : d->grabPeaks()) if (p.alive && std::abs (std::log2 (p.f / f)) < 1.0 / 12.0) return &p;
             return nullptr;
         };
         const auto* p25 = find (2500); const auto* p180 = find (180);
-        const int count = (int) d->grabPeaks().size();
-        bool okP = p25 != nullptr && p180 != nullptr && count <= 8;
+        int count = 0; for (auto& p : d->grabPeaks()) if (p.major) ++count;
+        bool okP = p25 != nullptr && p180 != nullptr && count <= 7;
         std::printf ("Caza de picos: %d marcas; 2.5 kHz %s (+%.1f dB, Q %.1f), 180 Hz %s\n", count,
                      p25 ? "encontrado" : "NO", p25 ? p25->prom : 0.0f, p25 ? p25->q : 0.0, p180 ? "encontrado" : "NO");
         snapshot (*edk, outDir + "/gaux_picos.png");
@@ -680,7 +690,7 @@ int main (int argc, char** argv)
                               && std::abs (b0.gainDb + std::min (12.0f, prom * 0.75f)) < 0.2 && b0.q >= 1.0;
             std::printf ("  clic = domar: banda en %.0f Hz, %+.1f dB, Q %.1f %s\n", b0.freq, b0.gainDb, b0.q, tame ? "OK" : "FALLA");
             // y el pico baja en el analizador
-            play (2.5, true);
+            grab (false); play (2.5, true); grab (true);
             const auto* after = find (2500);
             const bool lower = after == nullptr || after->prom < prom - 3.0f;
             std::printf ("  despues de domarlo el pico %s\n", lower ? (after ? "sobresale menos OK" : "ya no se marca OK") : "SIGUE IGUAL (FALLA)");
@@ -698,7 +708,8 @@ int main (int argc, char** argv)
                 drag = b1.on && std::abs (std::log2 (b1.freq / 180.0)) < 1.0 / 12.0 && std::abs (b1.gainDb + 8.0) < 0.6;
                 std::printf ("  arrastrar = recortar: banda en %.0f Hz, %+.1f dB %s\n", b1.freq, b1.gainDb, drag ? "OK" : "FALLA");
             }
-            // 3) en silencio las marcas se van y la pantalla vuelve a reposo
+            // 3) al sacar el mouse las marcas se van; en silencio la pantalla vuelve a reposo
+            grab (false);
             play (5.0, false);
             juce::AudioBuffer<float> sil (2, 512); juce::MidiBuffer mid;
             int drew = 0;

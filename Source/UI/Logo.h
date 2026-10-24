@@ -2,6 +2,7 @@
 #pragma once
 
 #include "GauxLookAndFeel.h"
+#include "BrandGaux.h"
 
 namespace gaux
 {
@@ -135,6 +136,64 @@ namespace Logo
             p.closeSubPath();
             return p;
         }
+    }
+
+
+    //==========================================================================
+    // "GAUX" de la marca del artista (pincel rojo con chorreados), trazado del logo original
+    inline const juce::Path& brandPath()
+    {
+        static const juce::Path p = []
+        {
+            juce::Path r;
+            r.setUsingNonZeroWinding (false);   // par-impar: los huecos de las letras quedan vacios
+            int k = 0;
+            for (int c = 0; c < BrandGaux::kNumContours; ++c)
+            {
+                for (int i = 0; i < BrandGaux::kLens[c]; ++i, k += 2)
+                {
+                    const juce::Point<float> pt (BrandGaux::kPts[k] / 4000.0f, BrandGaux::kPts[k + 1] / 4000.0f);
+                    if (i == 0) r.startNewSubPath (pt); else r.lineTo (pt);
+                }
+                r.closeSubPath();
+            }
+            return r;
+        }();
+        return p;
+    }
+
+    inline float brandWidth (float h) { return h * BrandGaux::kAspect; }
+
+    inline void drawBrand (juce::Graphics& g, juce::Rectangle<float> area, double timeSec)
+    {
+        const float h = juce::jmin (area.getHeight(), area.getWidth() / BrandGaux::kAspect);
+        const auto tr = juce::AffineTransform::scale (h).translated (area.getX(), area.getCentreY() - h * 0.5f);
+        juce::Path p (brandPath());
+        p.applyTransform (tr);
+        const juce::Colour red (0xffd8101c);
+        // resplandor rojo detras (como un letrero de neon apagado)
+        {
+            const auto c = area.getCentre();
+            const float rr = area.getWidth() * 0.6f;
+            juce::ColourGradient rg (red.withAlpha (0.18f), c.x, c.y, red.withAlpha (0.0f), c.x + rr, c.y, true);
+            rg.addColour (0.55, red.withAlpha (0.06f));
+            g.setGradientFill (rg);
+            g.fillRect (juce::Rectangle<float> (rr * 2.0f, rr * 2.0f).withCentre (c));
+        }
+        // brillo de glitch ocasional (cada ~5 s)
+        const double ph = std::fmod (timeSec, 5.2);
+        const float glitch = ph < 0.14 ? (float) (1.0 - ph / 0.14) : 0.0f;
+        if (glitch > 0.0f)
+        {
+            g.setColour (juce::Colour (0xff00e5ff).withAlpha (0.45f * glitch));
+            g.fillPath (p, juce::AffineTransform::translation (-h * 0.05f * glitch, 0));
+            g.setColour (juce::Colours::white.withAlpha (0.5f * glitch));
+            g.fillPath (p, juce::AffineTransform::translation (h * 0.05f * glitch, 0));
+        }
+        g.setColour (juce::Colours::black.withAlpha (0.55f));
+        g.fillPath (p, juce::AffineTransform::translation (0, h * 0.03f));   // sombra
+        g.setGradientFill (juce::ColourGradient (red.brighter (0.25f), 0, area.getY(), red.darker (0.25f), 0, area.getBottom(), false));
+        g.fillPath (p);
     }
 
     inline float raveWidth (float h, juce::Typeface::Ptr tf = nullptr)

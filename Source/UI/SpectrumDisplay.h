@@ -78,9 +78,13 @@ public:
     float xForFreq (double f) const { return freqToX (f); }   // (el teclado de abajo usa la misma escala)
 
     // CAZA DE PICOS (agarrar del analizador): resonancias que sobresalen de su entorno
-    struct GrabPeak { double f = 0, q = 4; float db = -140, prom = 0, alpha = 0; bool alive = false; };
+    struct GrabPeak { double f = 0, q = 4; float db = -140, prom = 0, alpha = 0; bool alive = false, major = true; };
     const std::vector<GrabPeak>& grabPeaks() const { return peaks; }
     juce::Point<float> peakMarker (const GrabPeak& p) const;
+    juce::Rectangle<float> peakLabel (const GrabPeak& p) const;
+    // Para pruebas: como si el mouse estuviera quieto sobre la pantalla (espectro congelado con sus picos)
+    void setSpectrumGrab (bool on) { forceGrab = on; }
+    void buildGrabPeaks();
 
     // CHOQUES con otra pista (otro Gaux del proyecto)
     juce::Rectangle<float> clashButtonBounds() const;
@@ -97,7 +101,9 @@ private:
         int pos = 0;
         bool fresh = false, visible = false;
         juce::Path fill, outline;
+        std::vector<float> dispDb;   // lo que se dibuja: un valor cada kDispStep px desde el borde izquierdo
     };
+    static constexpr float kDispStep = 2.0f;
 
     bool updateAnalyzer (Analyzer&, AnalyzerFifo&, float dt);   // true si cambio lo que se ve
 
@@ -170,7 +176,7 @@ private:
     float fpsAcc = 0;
     int lastMatchVersion = -1;
     bool lastDirty = false;
-    bool hoverFrozen = false;   // con el mouse quieto sobre la pantalla el espectro y los picos se congelan
+    bool hoverFrozen = false, forceGrab = false;   // con el mouse quieto sobre la pantalla el espectro y los picos se congelan
     static inline bool showFps = false;   // clic derecho en la pantalla vacia   // reloj de las animaciones (se congela en silencio: sin audio no se gasta CPU)
     // Capas en cache (fondo, resplandor, grilla, degradado del analizador)
     LayerCache bgLayer, glowLayer, glassLayer;
