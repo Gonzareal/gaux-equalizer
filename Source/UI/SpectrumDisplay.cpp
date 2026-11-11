@@ -15,7 +15,7 @@ static juce::String fmtFreq (double f)
 #ifdef JucePlugin_VersionString
  #define GAUX_VERSION_STR JucePlugin_VersionString
 #else
- #define GAUX_VERSION_STR "0.21.0"
+ #define GAUX_VERSION_STR "0.22.0"
 #endif
 
 static juce::Path linePath (const std::vector<juce::Point<float>>& pts)

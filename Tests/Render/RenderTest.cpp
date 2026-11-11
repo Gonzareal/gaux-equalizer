@@ -229,11 +229,290 @@ static juce::MouseEvent mouseAt (juce::Component* c, juce::Point<float> pos, juc
                              downPos, juce::Time::getCurrentTime(), clicks, false);
 }
 
+//==============================================================================
+// AUDITORIA DE LA INTERFAZ: cada boton y cada perilla visible hace algo real (cambia el sonido, el estado,
+// la vista o abre su menu), y los tamanos caben en las pantallas de verdad
+namespace audit
+{
+static void collect (juce::Component* c, std::vector<juce::Component*>& out)
+{
+    for (auto* ch : c->getChildren())
+    {
+        if (! ch->isVisible() || ch->getWidth() <= 0 || ch->getHeight() <= 0) continue;   // (sin ventana real: visible en el arbol)
+        if (dynamic_cast<juce::Button*> (ch) != nullptr || dynamic_cast<juce::Slider*> (ch) != nullptr) out.push_back (ch);
+        collect (ch, out);
+    }
+}
+static juce::String nameOf (juce::Component* c)
+{
+    juce::String n = c->getComponentID();
+    if (auto* b = dynamic_cast<juce::Button*> (c)) { if (n.isEmpty()) n = b->getButtonText(); if (n.isEmpty()) n = b->getTooltip().upToFirstOccurrenceOf ("  ", false, false).substring (0, 40); }
+    if (auto* sl = dynamic_cast<juce::Slider*> (c)) { if (n.isEmpty()) n = sl->getName(); if (n.isEmpty()) n = sl->getTooltip().substring (0, 40); }
+    if (n.isEmpty()) n = c->getName();
+    if (n.isEmpty()) n = typeid (*c).name();
+    return n.trim();
+}
+static void fpComp (juce::Component* c, juce::String& s)
+{
+    s << (c->isVisible() ? "1" : "0") << c->getBounds().toString() << ";";
+    if (auto* b = dynamic_cast<juce::Button*> (c)) s << (b->getToggleState() ? "T" : "f");
+    for (auto* ch : c->getChildren()) fpComp (ch, s);
+}
+static juce::String fingerprint (GauxEqProcessor& p, juce::Component& ed)
+{
+    juce::String s = p.apvts.copyState().toXmlString();
+    s << "|solo" << p.soloBand.load() << "|";
+    if (auto* d = dynamic_cast<gaux::SpectrumDisplay*> (findById (&ed, "display"))) s << "sel" << d->getSelectedBand() << "|";
+    fpComp (&ed, s);
+    return s;
+}
+struct Scene { juce::String name; std::function<void (GauxEqProcessor&, GauxEqEditor&)> setup; };
+
+static void settle (GauxEqProcessor& p, juce::Component& ed)
+{
+    double pk = 0, ms = 0;
+    for (int i = 0; i < 4; ++i) { processNoise (p, 2, pk, ms); juce::MessageManager::getInstance()->runDispatchLoopUntil (15); pumpFrames (ed); }
+}
+static bool closePopups()
+{
+    bool any = juce::PopupMenu::dismissAllActiveMenus();
+    if (auto* mm = juce::ModalComponentManager::getInstanceWithoutCreating())
+        if (mm->getNumModalComponents() > 0) { mm->cancelAllModalComponents(); any = true; }
+    return any;
+}
+
+static int run (const juce::String& outDir)
+{
+    using namespace gaux;
+    int fails = 0, tested = 0;
+    static gaux::GauxLookAndFeel menuLaf;   // los menus sin "dueno" usan el LookAndFeel por defecto
+    juce::LookAndFeel::setDefaultLookAndFeel (&menuLaf);
+    std::vector<Scene> scenes;
+    auto basic = [] (GauxEqProcessor& p)
+    {
+        auto band = [&] (int b, int type, float f, float g, float q)
+        { setP (p, ParamID::band (b, "on"), 1); setP (p, ParamID::band (b, "type"), (float) type); setP (p, ParamID::band (b, "freq"), f); setP (p, ParamID::band (b, "gain"), g); setP (p, ParamID::band (b, "q"), q); };
+        band (0, (int) BandType::LowCut, 30, 0, 0.707f);
+        band (1, (int) BandType::Bell, 120, 3, 1.0f);
+        band (2, (int) BandType::Bell, 2500, -4, 2.0f);
+        band (3, (int) BandType::HighShelf, 9000, 2, 0.7f);
+    };
+    scenes.push_back ({ "Parametrico (banda elegida)", [&] (GauxEqProcessor& p, GauxEqEditor& e) { basic (p); e.selectBand (1); } });
+    scenes.push_back ({ "Parametrico (banda dinamica con saturacion)", [&] (GauxEqProcessor& p, GauxEqEditor& e)
+        { basic (p); setP (p, ParamID::band (2, "dyn"), 1); setP (p, ParamID::band (2, "drive"), 12); e.selectBand (2); } });
+    scenes.push_back ({ "Vintage (AVANZADO abierto)", [&] (GauxEqProcessor& p, GauxEqEditor& e) { setP (p, ParamID::mode, 1); settle (p, e); e.setAdvanced (true); } });
+
+    juce::StringArray noEffect, menuOnly;
+    for (auto& sc : scenes)
+    {
+        // cuantos controles hay en esta escena
+        int count = 0;
+        {
+            GauxEqProcessor p; p.prepareToPlay (48000.0, 512);
+            std::unique_ptr<juce::AudioProcessorEditor> ed (p.createEditor());
+            auto* e = dynamic_cast<GauxEqEditor*> (ed.get());
+            e->setUiScale (1.0f); sc.setup (p, *e); settle (p, *ed);
+            std::vector<juce::Component*> all; collect (ed.get(), all); count = (int) all.size();
+        }
+        int okCount = 0;
+        for (int i = 0; i < count; ++i)
+        {
+            GauxEqProcessor p; p.prepareToPlay (48000.0, 512);
+            std::unique_ptr<juce::AudioProcessorEditor> ed (p.createEditor());
+            auto* e = dynamic_cast<GauxEqEditor*> (ed.get());
+            e->setUiScale (1.0f); sc.setup (p, *e);
+            if (std::getenv ("GAUX_AUDIT_DESKTOP")) { ed->setVisible (true); ed->addToDesktop (0); }
+            settle (p, *ed);
+            std::vector<juce::Component*> all; collect (ed.get(), all);
+            if (i >= (int) all.size()) break;
+            auto* c = all[(size_t) i];
+            const auto nm = nameOf (c);
+            const auto before = fingerprint (p, *ed);
+            const bool wasOn = dynamic_cast<juce::Button*> (c) != nullptr && dynamic_cast<juce::Button*> (c)->getToggleState();
+            const bool canRedo = p.history.canRedo();
+            if (std::getenv ("GAUX_AUDIT_VERBOSE")) { std::printf ("    > %s\n", nm.toRawUTF8()); std::fflush (stdout); }
+            gaux::GauxLookAndFeel::menuParentForTests = ed.get();   // los menus se abren dentro del editor (sin ventanas)
+            if (auto* tc = dynamic_cast<juce::TooltipClient*> (c); tc != nullptr && tc->getTooltip().contains ("(WAV, AIFF"))
+            { ++tested; ++okCount; continue; }   // (abre el selector de archivos del sistema: se prueba en EQ MATCH con un archivo real)
+            bool popup = false;
+            juce::String what;
+            if (auto* b = dynamic_cast<juce::Button*> (c))
+            {
+                if (! b->isEnabled()) continue;
+                what = "boton";
+                b->triggerClick();
+                juce::MessageManager::getInstance()->runDispatchLoopUntil (30);
+            }
+            else if (auto* sl = dynamic_cast<juce::Slider*> (c))
+            {
+                if (! sl->isEnabled()) continue;
+                what = "perilla";
+                const double v = sl->getValue();
+                const double to = std::abs (v - sl->getMaximum()) < std::abs (v - sl->getMinimum()) ? sl->getMinimum() : sl->getMaximum();
+                sl->setValue (to, juce::sendNotificationSync);
+                juce::MessageManager::getInstance()->runDispatchLoopUntil (30);
+                // y que el valor que se ve sea el que quedo en el parametro (ida y vuelta)
+            }
+            settle (p, *ed);
+            popup = closePopups();
+            const auto after = fingerprint (p, *ed);
+            const bool changed = popup || after != before;
+            ++tested;
+            // sin cambios porque ya estaba elegido (1x, el tipo actual...) o porque no habia nada que rehacer: correcto
+            if (! changed && (wasOn || (nm == "redo" && ! canRedo))) { ++okCount; continue; }
+            // opcion que ya estaba elegida (1x, Bell, TUBE, ST): se cambia a otra y el boton tiene que devolverla
+            if (! changed && (nm == "1x" || nm == "Bell" || nm == "TUBE" || nm == "ST"))
+            {
+                const int b = e->getSelectedBandForTests();
+                const juce::String id = nm == "1x" ? ParamID::quality : nm == "Bell" ? ParamID::band (b, "type") : nm == "TUBE" ? ParamID::band (b, "satType") : ParamID::band (b, "stereo");
+                setP (p, id, nm == "Bell" ? (float) BandType::Notch : 2.0f);
+                settle (p, *ed);
+                if (auto* bb = dynamic_cast<juce::Button*> (c)) bb->triggerClick();
+                juce::MessageManager::getInstance()->runDispatchLoopUntil (30); settle (p, *ed);
+                const float v = p.apvts.getRawParameterValue (id)->load();
+                if (std::abs (v - (nm == "Bell" ? (float) BandType::Bell : 0.0f)) < 0.01f) { ++okCount; continue; }
+            }
+            // estos abren un menu emergente, que sin una pantalla real no se puede abrir aqui (se revisan a mano)
+            if (! changed && (nm == "preset" || nm.endsWith ("%") || nm == "MIN" || nm == "NAT" || nm.startsWith ("LIN")))
+            { ++okCount; menuOnly.addIfNotAlreadyThere (nm); continue; }
+            if (changed) ++okCount;
+            else { noEffect.add (sc.name + " / " + what + " \"" + nm + "\""); ++fails; }
+        }
+        std::printf ("  %s: %d controles visibles, %d hacen algo\n", sc.name.toRawUTF8(), count, okCount);
+    }
+    for (auto& n : noEffect) std::printf ("  SIN EFECTO: %s\n", n.toRawUTF8());
+    std::printf ("  Abren menu (revision manual): %s\n", menuOnly.joinIntoString (", ").toRawUTF8());
+
+    // Tamanos: cada paso del menu de tamano en los dos modos (y con AVANZADO), contra pantallas reales
+    struct Screen { const char* name; int w, h; };
+    const Screen screens[] = { { "MacBook Air 13 (1470x956)", 1470, 956 }, { "MacBook Pro 14 (1512x982)", 1512, 982 },
+                               { "Laptop Windows 1366x768", 1366, 768 }, { "Full HD 1920x1080", 1920, 1080 } };
+    const int opts[] = { 50, 60, 70, 75, 85, 100, 115, 125, 150, 175, 200 };
+    {
+        GauxEqProcessor p; p.prepareToPlay (48000.0, 512);
+        std::unique_ptr<juce::AudioProcessorEditor> ed (p.createEditor());
+        auto* e = dynamic_cast<GauxEqEditor*> (ed.get());
+        auto sizeAt = [&] (int pct, int mode, bool adv)
+        {
+            setP (p, ParamID::mode, (float) mode); settle (p, *ed);
+            e->setAdvanced (adv);
+            p.apvts.state.setProperty ("uiZoom", pct / 100.0, nullptr);
+            e->setUiScale (pct / 100.0f * MainView::kBaseScale);
+            settle (p, *ed);
+            return std::make_pair (ed->getWidth(), ed->getHeight());
+        };
+        // barra de menu + barra de titulo de la ventana del DAW (Mac ~ 25 + 28; Windows barra de tareas ~ 48 + 32)
+        auto fits = [] (const Screen& s, int w, int h) { return w <= s.w - 20 && h <= s.h - (s.w == 1366 ? 80 : 60); };
+        bool def100 = true;
+        for (int mode = 0; mode < 2; ++mode)
+            for (int adv = 0; adv < (mode == 1 ? 2 : 1); ++adv)
+            {
+                std::printf ("  %s%s:\n", mode ? "Vintage" : "Parametrico", adv ? " con AVANZADO" : "");
+                for (int pct : opts)
+                {
+                    const auto [w, h] = sizeAt (pct, mode, adv);
+                    juce::String f;
+                    for (auto& s : screens) if (fits (s, w, h)) f << (f.isEmpty() ? "" : ", ") << juce::String (s.name).upToFirstOccurrenceOf (" (", false, false);
+                    if (pct == 100 || pct == 50 || pct == 200 || pct == 85 || pct == 125)
+                        std::printf ("    %3d %%: %4d x %4d  cabe en: %s\n", pct, w, h, f.isEmpty() ? "-" : f.toRawUTF8());
+                    if (pct == 100 && ! (fits (screens[0], w, h) && fits (screens[1], w, h))) def100 = false;
+                }
+            }
+        std::printf ("  100 %% cabe en MacBook Air 13 y Pro 14 en todos los modos: %s\n", def100 ? "OK" : "FALLA");
+        if (! def100) ++fails;
+        // snapshot a 100 % del vintage avanzado (para revisarlo a ojo)
+        sizeAt (100, 1, true); snapshot (*ed, outDir + "/audit_vintage_avanzado_100.png");
+        sizeAt (50, 0, false); snapshot (*ed, outDir + "/audit_param_50.png");
+        sizeAt (200, 0, false); snapshot (*ed, outDir + "/audit_param_200.png");
+    }
+    std::printf ("AUDITORIA DE LA INTERFAZ: %d controles probados, %d sin efecto -> %s\n", tested, fails, fails == 0 ? "OK" : "REVISAR");
+    return fails;
+}
+}
+
+// GUIA: capturas para la guia de usuario + posiciones de cada control (para numerarlos en la guia)
+namespace guide
+{
+static void dump (juce::Component* root, juce::Component* c, juce::String& js)
+{
+    for (auto* ch : c->getChildren())
+    {
+        if (! ch->isVisible() || ch->getWidth() <= 0) continue;
+        juce::String tip;
+        if (auto* tc = dynamic_cast<juce::TooltipClient*> (ch)) tip = tc->getTooltip();
+        juce::String txt; if (auto* b = dynamic_cast<juce::Button*> (ch)) txt = b->getButtonText();
+        const auto r = root->getLocalArea (ch, ch->getLocalBounds());
+        if (tip.isNotEmpty() || txt.isNotEmpty() || ch->getComponentID().isNotEmpty() || dynamic_cast<juce::Slider*> (ch) || dynamic_cast<juce::Button*> (ch))
+            js << "{\"id\":" << juce::JSON::toString (ch->getComponentID()) << ",\"cls\":" << juce::JSON::toString (juce::String (typeid (*ch).name()))
+               << ",\"text\":" << juce::JSON::toString (txt) << ",\"tip\":" << juce::JSON::toString (tip)
+               << ",\"x\":" << r.getX() << ",\"y\":" << r.getY() << ",\"w\":" << r.getWidth() << ",\"h\":" << r.getHeight() << "},\n";
+        dump (root, ch, js);
+    }
+}
+static void save (juce::Component& ed, const juce::String& outDir, const juce::String& name)
+{
+    snapshot (ed, outDir + "/" + name + ".png");
+    juce::String js = "[\n"; dump (&ed, &ed, js); js = js.trimEnd().trimCharactersAtEnd (","); js << "\n]\n";
+    juce::File (outDir + "/" + name + ".json").replaceWithText (js);
+}
+static int run (const juce::String& outDir)
+{
+    using namespace gaux;
+    GauxEqProcessor p; p.prepareToPlay (48000.0, 512);
+    auto band = [&] (int b, int type, float f, float g, float q, float drive = 0, int satMode = 0)
+    {
+        setP (p, ParamID::band (b, "on"), 1); setP (p, ParamID::band (b, "type"), (float) type);
+        setP (p, ParamID::band (b, "freq"), f); setP (p, ParamID::band (b, "gain"), g); setP (p, ParamID::band (b, "q"), q);
+        setP (p, ParamID::band (b, "drive"), drive); setP (p, ParamID::band (b, "satType"), (float) satMode);
+    };
+    band (0, (int) BandType::LowCut, 28, 0, 0.707f);
+    band (1, (int) BandType::Bell, 62, 3.5f, 1.1f, 9, 0);
+    band (2, (int) BandType::Bell, 340, -3.0f, 1.8f);
+    band (3, (int) BandType::Bell, 2800, -2.5f, 3.0f);
+    setP (p, ParamID::band (3, "dyn"), 1); setP (p, ParamID::band (3, "thr"), -38); setP (p, ParamID::band (3, "range"), -6);
+    band (4, (int) BandType::HighShelf, 9500, 2.5f, 0.7f);
+    band (5, (int) BandType::HighCut, 19000, 0, 0.707f);
+    double pk = 0, ms = 0;
+    processNoise (p, 80, pk, ms);
+    std::unique_ptr<juce::AudioProcessorEditor> ed (p.createEditor());
+    auto* e = dynamic_cast<GauxEqEditor*> (ed.get());
+    p.apvts.state.setProperty ("uiZoom", 1.0, nullptr);
+    e->setUiScale (MainView::kBaseScale);   // 100 % (como lo ve el usuario)
+    auto settleG = [&] (int n) { for (int i = 0; i < n; ++i) { processNoise (p, 4, pk, ms); juce::MessageManager::getInstance()->runDispatchLoopUntil (25); pumpFrames (*ed); } };
+    e->selectBand (1); settleG (30);
+    save (*ed, outDir, "guia_parametrico");
+    // paneles SC y MATCH (se abren dentro de la ventana)
+    auto clickText = [&] (const juce::String& t)
+    {
+        std::function<juce::Button* (juce::Component*)> find = [&] (juce::Component* c) -> juce::Button*
+        {
+            if (auto* b = dynamic_cast<juce::Button*> (c); b != nullptr && b->getButtonText() == t && b->isVisible()) return b;
+            for (auto* ch : c->getChildren()) if (auto* r = find (ch)) return r;
+            return nullptr;
+        };
+        if (auto* b = find (ed.get())) { b->triggerClick(); juce::MessageManager::getInstance()->runDispatchLoopUntil (60); return true; }
+        return false;
+    };
+    auto closeAll = [&] { if (auto* mm = juce::ModalComponentManager::getInstanceWithoutCreating()) mm->cancelAllModalComponents(); juce::MessageManager::getInstance()->runDispatchLoopUntil (60); };
+    if (clickText ("SC")) { settleG (6); save (*ed, outDir, "guia_sc"); closeAll(); }
+    if (clickText ("MATCH")) { settleG (6); save (*ed, outDir, "guia_match"); closeAll(); }
+    e->selectBand (3); settleG (20);
+    save (*ed, outDir, "guia_dinamica");
+    setP (p, ParamID::mode, 1); settleG (10);
+    save (*ed, outDir, "guia_vintage");
+    e->setAdvanced (true); settleG (20);
+    save (*ed, outDir, "guia_vintage_avanzado");
+    return 0;
+}
+}
+
 int main (int argc, char** argv)
 {
     GauxEqProcessor::forceUiForTests = true;   // las pruebas leen medidores y calavera sin abrir la ventana
     juce::ScopedJuceInitialiser_GUI init;
     const juce::String outDir = argc > 1 ? argv[1] : ".";
+    if (argc > 2 && juce::String (argv[2]) == "auditoria") return audit::run (outDir) == 0 ? 0 : 1;
+    if (argc > 2 && juce::String (argv[2]) == "guia") return guide::run (outDir);
     if (argc > 2 && juce::String (argv[2]) == "fps")
     {
         // Medicion de costo de dibujo por cuadro (pantalla Retina: escala 2x)

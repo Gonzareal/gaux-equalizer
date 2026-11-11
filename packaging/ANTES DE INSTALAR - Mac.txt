@@ -5,6 +5,9 @@
 Gracias por probar Gaux Equalizer, un EQ gratuito hecho por
 Aleksander Gaux para productores.
 
+En este mismo paquete está la GUÍA DE USUARIO ("Guia de Gaux Equalizer.pdf"):
+qué hace cada botón, cómo sacarle todo el provecho, recetas y atajos.
+
 --------------------------------------------------------------
  IMPORTANTE: VAS A VER UNA ALERTA DE APPLE (ES NORMAL)
 --------------------------------------------------------------

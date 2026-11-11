@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.22)
 
-project(GauxEqualizer VERSION 0.21.0)
+project(GauxEqualizer VERSION 0.22.0)
 
 # Windows: runtime de C++ estatico en TODOS los objetivos (JUCE, el plugin y sus envoltorios VST3/Standalone),
 # asi el plugin no depende de que el PC tenga instalado el runtime de Visual Studio y todo enlaza igual

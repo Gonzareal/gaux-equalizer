@@ -118,6 +118,35 @@ inline BiquadCoeffs makeFirstOrderHighPass (double fs, double f)
     BiquadCoeffs c; c.b0 = n; c.b1 = -n; c.b2 = 0; c.a1 = (k - 1.0) * n; c.a2 = 0;
     return c;
 }
+// Pasa altos de 1er orden sin aplastamiento: polo como el analogico, cero en DC y la magnitud del analogico
+// en Nyquist (en graves y medios el clasico ya es exacto; en el medio se mezclan suave)
+inline BiquadCoeffs makeAnalogFirstOrderHighPass (double fs, double f)
+{
+    f = safeFreq (f, fs);
+    const auto classic = makeFirstOrderHighPass (fs, f);
+    const double w = smoothRamp ((f / fs - 0.015) / 0.03);
+    if (w <= 0.0) return classic;
+    const double p = std::exp (-2.0 * kPi * f / fs);
+    const double fn = fs * 0.5;
+    const double mN = fn / std::sqrt (fn * fn + f * f);
+    double k = mN * (1.0 + p) / 2.0;
+    {
+        // ganancia por minimos cuadrados (en dB) sobre todo el rango que se oye, en vez de solo en Nyquist
+        const auto& G = LsGrid::forRate (fs);
+        double acc = 0.0, wsum = 0.0;
+        for (int i = 0; i < G.n; ++i)
+        {
+            const double r = G.f[i] / f, T = r * r / (1.0 + r * r);   // |H|^2 analogico
+            if (T < 0.01) continue;                                    // (la zona ya cortada no manda)
+            const double c1 = std::cos (2.0 * kPi * G.f[i] / fs);
+            const double base = (2.0 - 2.0 * c1) / (1.0 + p * p - 2.0 * p * c1);
+            acc += std::log (T / base); wsum += 1.0;
+        }
+        if (wsum > 0.0) k = std::exp (0.5 * acc / wsum);
+    }
+    BiquadCoeffs c; c.b0 = k; c.b1 = -k; c.b2 = 0; c.a1 = -p; c.a2 = 0;
+    return blendBiquad (classic, c, w);
+}
 inline BiquadCoeffs makeFirstOrderLowPass (double fs, double f)
 {
     f = safeFreq (f, fs);
@@ -129,6 +158,44 @@ inline BiquadCoeffs makeFirstOrderLowPass (double fs, double f)
     const double kk = (1.0 - p) / (1.0 + b);                        // 0 dB en DC
     BiquadCoeffs c; c.b0 = kk; c.b1 = kk * b; c.b2 = 0; c.a1 = -p; c.a2 = 0;
     return c;
+}
+// Pasa bajos de 1er orden (High Cut de 6 y 18 dB/oct) con el cero ubicado por minimos cuadrados: 0 dB exactos en
+// DC y la curva del analogico en todo el rango que se oye (antes solo se igualaba en Nyquist: hasta 0.9 dB de
+// diferencia arriba de 12 kHz). La busqueda es suave (sin saltos al mover la frecuencia).
+inline BiquadCoeffs makeAnalogFirstOrderLowPass (double fs, double f)
+{
+    const auto base = makeFirstOrderLowPass (fs, f);
+    f = safeFreq (f, fs);
+    const double w = smoothRamp ((f / fs - 0.015) / 0.03);
+    if (w <= 0.0) return base;
+    const double p = std::exp (-2.0 * kPi * f / fs);
+    const auto& G = LsGrid::forRate (fs);
+    double T[LsGrid::n], c1[LsGrid::n];
+    for (int i = 0; i < G.n; ++i) { const double r = G.f[i] / f; T[i] = 1.0 / (1.0 + r * r); c1[i] = std::cos (2.0 * kPi * G.f[i] / fs); }
+    auto cost = [&] (double b)
+    {
+        const double kk = (1.0 - p) / (1.0 + b);
+        double e = 0.0;
+        for (int i = 0; i < G.n; ++i)
+        {
+            if (T[i] < 0.01) continue;
+            const double h2 = kk * kk * (1.0 + b * b + 2.0 * b * c1[i]) / (1.0 + p * p - 2.0 * p * c1[i]);
+            const double d = std::log (h2 / T[i]);
+            e += d * d;
+        }
+        return e;
+    };
+    double lo = -0.95, hi = 0.95;   // seccion aurea
+    const double g = 0.6180339887498949;
+    double x1 = hi - g * (hi - lo), x2 = lo + g * (hi - lo), f1 = cost (x1), f2 = cost (x2);
+    for (int it = 0; it < 36; ++it)
+    {
+        if (f1 < f2) { hi = x2; x2 = x1; f2 = f1; x1 = hi - g * (hi - lo); f1 = cost (x1); }
+        else         { lo = x1; x1 = x2; f1 = f2; x2 = lo + g * (hi - lo); f2 = cost (x2); }
+    }
+    const double b = 0.5 * (lo + hi), kk = (1.0 - p) / (1.0 + b);
+    BiquadCoeffs c; c.b0 = kk; c.b1 = kk * b; c.b2 = 0; c.a1 = -p; c.a2 = 0;
+    return blendBiquad (base, c, w);
 }
 
 // Pasa-banda de m secciones iguales: la Q de cada una se ajusta para que el ancho total a -3 dB sea f/Q
@@ -151,10 +218,10 @@ inline int designBand (const BandSettings& s, double fs, BiquadCoeffs* out)
     switch ((BandType) s.type)
     {
         case BandType::Bell:      out[0] = makeAnalogBell (fs, s.freq, s.q, safeGain (s.gainDb)); return 1;
-        case BandType::LowShelf:  out[0] = makeLowShelf (fs, s.freq, std::min (s.q, kShelfMaxQ), safeGain (s.gainDb));  return 1;
+        case BandType::LowShelf:  out[0] = makeAnalogLowShelf (fs, s.freq, std::min (s.q, kShelfMaxQ), safeGain (s.gainDb));  return 1;
         case BandType::HighShelf: out[0] = makeAnalogHighShelf (fs, s.freq, std::min (s.q, kShelfMaxQ), safeGain (s.gainDb)); return 1;
-        case BandType::Notch:     out[0] = makeNotch (fs, s.freq, s.q);               return 1;
-        case BandType::AllPass:   out[0] = makeAllPass (fs, s.freq, s.q);             return 1;
+        case BandType::Notch:     out[0] = makeAnalogNotch (fs, s.freq, s.q);         return 1;
+        case BandType::AllPass:   out[0] = makeAnalogAllPass (fs, s.freq, s.q);       return 1;
         case BandType::TiltShelf:
         {
             // Tilt: -g/2 abajo y +g/2 arriba, con el pivote en la frecuencia (0 dB ahi)
@@ -178,7 +245,7 @@ inline int designBand (const BandSettings& s, double fs, BiquadCoeffs* out)
             const bool lowCut = s.type == (int) BandType::LowCut;
             const auto plan = butterworthPlan (cutPoles (s.slope));
             int n = 0;
-            if (plan.firstOrder) out[n++] = lowCut ? makeFirstOrderHighPass (fs, s.freq) : makeFirstOrderLowPass (fs, s.freq);
+            if (plan.firstOrder) out[n++] = lowCut ? makeAnalogFirstOrderHighPass (fs, s.freq) : makeAnalogFirstOrderLowPass (fs, s.freq);
             for (int i = 0; i < plan.biquads; ++i)
             {
                 // En 12 dB/oct la Q controla la resonancia; en el resto se
@@ -186,7 +253,7 @@ inline int designBand (const BandSettings& s, double fs, BiquadCoeffs* out)
                 double q = (plan.biquads == 1 && ! plan.firstOrder) ? s.q : plan.q[i];
                 if ((plan.biquads > 1 || plan.firstOrder) && i == plan.biquads - 1)
                     q *= s.q / 0.7071;
-                out[n++] = lowCut ? makeHighPass (fs, s.freq, q) : makeAnalogLowPass (fs, s.freq, q);
+                out[n++] = lowCut ? makeAnalogHighPass (fs, s.freq, q) : makeAnalogLowPass (fs, s.freq, q);
             }
             return n;
         }

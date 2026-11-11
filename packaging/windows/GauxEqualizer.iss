@@ -55,9 +55,11 @@ Type: filesandordirs; Name: "{commoncf64}\VST3\Gaux Equalizer.vst3"
 Source: "{#BuildDir}\VST3\Gaux Equalizer.vst3\*"; DestDir: "{commoncf64}\VST3\Gaux Equalizer.vst3"; Flags: ignoreversion recursesubdirs createallsubdirs; Components: vst3
 Source: "{#BuildDir}\Standalone\Gaux Equalizer.exe"; DestDir: "{app}"; Flags: ignoreversion; Components: app
 Source: "..\LICENCIA.txt"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\Guia de Gaux Equalizer.pdf"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{autoprograms}\Gaux Equalizer"; Filename: "{app}\Gaux Equalizer.exe"; Components: app
+Name: "{autoprograms}\Gaux Equalizer - Guia de usuario"; Filename: "{app}\Guia de Gaux Equalizer.pdf"
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{commoncf64}\VST3\Gaux Equalizer.vst3"

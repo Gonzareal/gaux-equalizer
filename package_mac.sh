@@ -77,6 +77,7 @@ productbuild --distribution "$WORK/distribution.xml" --resources packaging/mac -
 # 4) Textos, licencia y codigo fuente (la licencia AGPLv3 pide incluirlo)
 cp "packaging/ANTES DE INSTALAR - Mac.txt" "$DIST/"
 cp packaging/LICENCIA.txt "$DIST/"
+cp "packaging/Guia de Gaux Equalizer.pdf" "$DIST/"
 curl -fsSL --max-time 20 https://www.gnu.org/licenses/agpl-3.0.txt -o "$DIST/AGPLv3.txt" 2>/dev/null || rm -f "$DIST/AGPLv3.txt"
 if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     git archive --format=zip --prefix=GauxEQ/ -o "$DIST/GauxEQ_codigo_fuente.zip" HEAD

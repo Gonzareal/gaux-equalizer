@@ -1,6 +1,18 @@
-# Gaux Equalizer v0.21
+# Gaux Equalizer v0.22
 
 EQ para producción de música electrónica, desde la mezcla de cada instrumento hasta el mastering. Dos caras:
+
+## Novedades v0.22 (auditoría completa)
+- **Guía de usuario en PDF** dentro de cada paquete (Mac y Windows): qué hace cada botón, flujos de trabajo, recetas, atajos y preguntas frecuentes, con capturas reales.
+- **Curvas aún más analógicas en fase mínima (sin latencia)**: los filtros ahora se ajustan por mínimos cuadrados a la curva del EQ analógico en todo el rango audible (no solo en 3 puntos). Medido con el audio real contra la fórmula analógica de libro, con bandas hasta 10 kHz a 44.1 kHz, la mayor diferencia baja de hasta 6.6 dB (low cut agudo) y 2 a 5 dB (shelves, notch) a menos de 0.9 dB en todos los tipos (campanas 0.5 dB, tilt 0.1 dB, cortes 0.1 a 0.7 dB). En graves y medios el sonido es idéntico al de antes; el Vintage no cambia.
+- **All Pass con la fase del analógico** también en agudos (y en fase natural ya no altera la magnitud).
+- **Spectrum grab** (mouse quieto sobre la pantalla): espectro congelado, contorno encendido y las resonancias marcadas con nota y cents; clic = domar, arrastrar = recortar.
+- **Bypass por banda** (tecla 0 con varias bandas elegidas, o el botón del panel); **solo** con fundido sin clics.
+- **Logo del Paramétrico** con el GAUX de la marca Aleksander Gaux.
+- **100 % más compacto** (cabe en un MacBook Air de 13" también con AVANZADO abierto) y ajuste automático a la pantalla.
+- Los paneles **SC** y **MATCH** se abren dentro de la ventana del plugin (escalan con el tamaño y nunca quedan sueltos al cerrar la ventana o quitar el plugin).
+- Seleccionar una banda libre en los números de abajo y tocar su botón de encendido la crea.
+- **Auditoría automática nueva**: cada tipo de banda contra el analógico de libro (1512 ajustes, fases mínima y natural, 44.1 y 96 kHz) y cada botón y perilla visibles de la interfaz (183 controles) tienen que hacer algo real.
 
 ## Novedades v0.21 (el Paramétrico al nivel de los mejores EQ del mundo, con identidad propia)
 - **24 bandas** (antes 16). Las sesiones viejas abren igual que antes.

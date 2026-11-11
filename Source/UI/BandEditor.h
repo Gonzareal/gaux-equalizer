@@ -78,11 +78,19 @@ public:
     explicit BandEditor (GauxEqProcessor& p) : proc (p)
     {
         addAndMakeVisible (power);
-        power.setTooltip ("Bypass de la banda (sigue puesta, en gris, pero no suena)  -  tecla 0: todas las elegidas");
+        power.setTooltip ("Encender la banda / bypass (en bypass sigue puesta, en gris, pero no suena)  -  tecla 0: todas las elegidas");
         power.setClickingTogglesState (false);
         power.onClick = [this]
         {
-            setParamValue (proc.apvts, ParamID::band (band, "byp"), proc.params.bands[(size_t) band].byp->load() > 0.5f ? 0.0f : 1.0f);
+            // Banda sin usar (elegida desde los numeros de abajo): el boton la crea. Banda en uso: bypass.
+            const auto& bp = proc.params.bands[(size_t) band];
+            if (bp.on->load() < 0.5f)
+            {
+                setParamValue (proc.apvts, ParamID::band (band, "byp"), 0.0f);
+                setParamValue (proc.apvts, ParamID::band (band, "on"), 1.0f);
+            }
+            else
+                setParamValue (proc.apvts, ParamID::band (band, "byp"), bp.byp->load() > 0.5f ? 0.0f : 1.0f);
             proc.history.commit();
             refresh();
         };
@@ -381,7 +389,7 @@ private:
     {
         const auto s = proc.params.bandRaw (band);
         {
-            const bool lit = ! proc.params.isBypassed (band);
+            const bool lit = proc.params.bands[(size_t) band].on->load() > 0.5f && ! proc.params.isBypassed (band);
             if (power.getToggleState() != lit) power.setToggleState (lit, juce::dontSendNotification);
         }
         for (auto* t : typeButtons) { const bool sel = t->type == s.type; if (t->selected != sel) { t->selected = sel; t->repaint(); } }

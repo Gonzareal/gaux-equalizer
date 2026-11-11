@@ -34,7 +34,7 @@ MainView::MainView (GauxEqProcessor& p)
     {
         auto panel = std::make_unique<gaux::SidechainPanel> (proc, vintageView);
         panel->setLookAndFeel (&lnf);
-        juce::CallOutBox::launchAsynchronously (std::move (panel), scChip.getScreenBounds(), nullptr);
+        launchCallout (std::move (panel), scChip);
     };
     addAndMakeVisible (scChip);
     matchChip.setTooltip ("EQ MATCH: que esta pista suene con el balance de una referencia (un tema o el sidechain)");
@@ -42,7 +42,8 @@ MainView::MainView (GauxEqProcessor& p)
     matchChip.onClick = [this]
     {
         auto panel = std::make_unique<gaux::MatchPanel> (proc);
-        juce::CallOutBox::launchAsynchronously (std::move (panel), matchChip.getScreenBounds(), nullptr);
+        panel->setLookAndFeel (&lnf);
+        launchCallout (std::move (panel), matchChip);
     };
     addAndMakeVisible (matchChip);
 
@@ -140,6 +141,7 @@ MainView::MainView (GauxEqProcessor& p)
 
 MainView::~MainView()
 {
+    closeCallout();   // (el panel SC/MATCH abierto se cierra con la ventana)
     stopTimer();
 
     setLookAndFeel (nullptr);
@@ -246,6 +248,29 @@ void MainView::updateUndoButtons()
     const bool u = proc.history.canUndo(), r = proc.history.canRedo();
     if (undoButton.available != u) { undoButton.available = u; undoButton.repaint(); }
     if (redoButton.available != r) { redoButton.available = r; redoButton.repaint(); }
+}
+
+void MainView::launchCallout (std::unique_ptr<juce::Component> panel, juce::Component& from)
+{
+    // El panel (SC o MATCH) vive DENTRO de la ventana del plugin y es del plugin: nunca queda una ventana suelta
+    // que siga usando los parametros despues de cerrar la ventana o quitar el plugin de la pista. Ademas se
+    // agranda y achica con el tamano de la interfaz.
+    closeCallout();
+    calloutContent = std::move (panel);
+    callout = std::make_unique<juce::CallOutBox> (*calloutContent, getLocalArea (&from, from.getLocalBounds()), this);
+    juce::Component::SafePointer<MainView> safe (this);
+    callout->enterModalState (true, juce::ModalCallbackFunction::create ([safe] (int)
+    {
+        // (se borra despues de salir del estado modal, no durante)
+        juce::MessageManager::callAsync ([safe] { if (safe != nullptr) safe->closeCallout(); });
+    }), false);
+}
+
+void MainView::closeCallout()
+{
+    if (callout != nullptr && callout->isCurrentlyModal()) callout->exitModalState (0);
+    callout.reset();
+    calloutContent.reset();
 }
 
 void MainView::showScaleMenu()

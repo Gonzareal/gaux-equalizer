@@ -235,6 +235,84 @@ inline void probeErrors (const BiquadCoeffs& a, const BiquadCoeffs& b, double fs
     }
 }
 
+// "Matched" por minimos cuadrados (v0.22): polos exactamente como el analogico y el numerador que mejor iguala
+// la magnitud analogica en TODO el rango audible (24 puntos de 20 Hz a 20 kHz, error relativo), no solo en 3
+// puntos. |N|^2 = B0 p0 + B1 p1 + B2 p2 es lineal en (B1, B2): se resuelve exacto (2x2), con B0 fijo (DC exacto).
+// Cerca de Nyquist da curvas 3 a 10 veces mas parecidas al analogico que el ajuste de 3 puntos. Es una funcion
+// suave de los parametros (sin saltos al mover las perillas) y los polos son siempre estables.
+struct LsGrid
+{
+    static constexpr int n = 24;
+    double fs = 0.0, f[n], p0[n], p1[n], p2[n];
+    void build (double sampleRate)
+    {
+        fs = sampleRate;
+        const double top = std::min (20000.0, 0.46 * fs), lo = 20.0;
+        for (int i = 0; i < n; ++i)
+        {
+            f[i] = lo * std::pow (top / lo, i / (double) (n - 1));
+            const double s1 = std::sin (kPi * f[i] / fs);
+            p1[i] = s1 * s1; p0[i] = 1.0 - p1[i]; p2[i] = 4.0 * p0[i] * p1[i];
+        }
+    }
+    static const LsGrid& forRate (double sampleRate)
+    {
+        thread_local LsGrid g;
+        if (g.fs != sampleRate) g.build (sampleRate);
+        return g;
+    }
+};
+
+inline bool lsMatchedFromAnalog (const AnalogBiquad& an, double fs, BiquadCoeffs& c)
+{
+    const double wp = std::sqrt (an.d0 / an.d2), Qp = wp * an.d2 / an.d1;
+    const double w = wp / fs, q = 0.5 / Qp;
+    double a1, a2 = std::exp (-2.0 * q * w);
+    if (q <= 1.0) a1 = -2.0 * std::exp (-q * w) * std::cos (std::sqrt (1.0 - q * q) * w);
+    else          a1 = -2.0 * std::exp (-q * w) * std::cosh (std::sqrt (q * q - 1.0) * w);
+    const double A0 = (1.0 + a1 + a2) * (1.0 + a1 + a2), A1 = (1.0 - a1 + a2) * (1.0 - a1 + a2), A2 = -4.0 * a2;
+    const double B0 = analogMag2 (an, 0.0) * A0;
+    const auto& G = LsGrid::forRate (fs);
+    double s11 = 0, s12 = 0, s22 = 0, r1 = 0, r2 = 0;
+    double T[LsGrid::n], Tmax = 0.0;
+    for (int k = 0; k < G.n; ++k) { T[k] = analogMag2 (an, 2.0 * kPi * G.f[k]); Tmax = std::max (Tmax, T[k]); }
+    for (int k = 0; k < G.n; ++k)
+    {
+        const double D2 = A0 * G.p0[k] + A1 * G.p1[k] + A2 * G.p2[k];
+        const double Nt = T[k] * D2;
+        // error relativo (en dB) donde la curva se oye; debajo de -20 dB del maximo (zona ya cortada) pesa menos
+        const double ref = std::max (T[k], 0.01 * Tmax) * D2;
+        const double wt = 1.0 / std::max (1.0e-30, ref * ref);
+        const double y = Nt - B0 * G.p0[k];
+        s11 += wt * G.p1[k] * G.p1[k]; s12 += wt * G.p1[k] * G.p2[k]; s22 += wt * G.p2[k] * G.p2[k];
+        r1 += wt * G.p1[k] * y; r2 += wt * G.p2[k] * y;
+    }
+    const double det = s11 * s22 - s12 * s12;
+    if (! (std::abs (det) > 1.0e-300) || ! std::isfinite (det)) return false;
+    double B1 = (r1 * s22 - r2 * s12) / det, B2 = (s11 * r2 - s12 * r1) / det;
+    B1 = std::max (B1, 0.0);                                   // (proyeccion continua a un |N|^2 valido)
+    const double sB0 = std::sqrt (std::max (0.0, B0)), sB1 = std::sqrt (B1), W = 0.5 * (sB0 + sB1);
+    B2 = std::max (B2, -W * W);
+    c.b0 = 0.5 * (W + std::sqrt (std::max (0.0, W * W + B2)));
+    c.b1 = 0.5 * (sB0 - sB1);
+    c.b2 = c.b0 != 0.0 ? -B2 / (4.0 * c.b0) : 0.0;
+    c.a1 = a1; c.a2 = a2;
+    return std::isfinite (c.b0) && std::isfinite (c.b1) && std::isfinite (c.b2) && c.b0 != 0.0;
+}
+
+// Mezcla suave hacia el ajuste por minimos cuadrados: nada en graves (ahi todos los disenos ya son exactos y
+// el sonido queda identico al de siempre), completo desde ~6 % de fs, y nunca con polos pegados a Nyquist
+inline BiquadCoeffs lsRefine (const BiquadCoeffs& cur, const AnalogBiquad& an, double fs, double f)
+{
+    const double wp = std::sqrt (an.d0 / an.d2), fp = wp / (2.0 * kPi), Qp = wp * an.d2 / an.d1;
+    // (las secciones muy resonantes de los cortes empinados y del BRICK ya estan bien con su diseno propio)
+    const double w = smoothRamp ((f / fs - 0.02) / 0.04) * smoothRamp ((0.44 - fp / fs) / 0.04) * smoothRamp ((3.0 - Qp) / 1.0);
+    if (w <= 0.0) return cur;
+    BiquadCoeffs ls;
+    if (! lsMatchedFromAnalog (an, fs, ls)) return cur;
+    return blendBiquad (cur, ls, w);
+}
+
 // Campana con ganancia en Nyquist igual a la del analogico (S. Orfanidis, JAES 1997).
 // GB: ganancia a la que se mide el ancho Dh (Hz).
 inline bool orfanidisBell (double fs, double f0, double gainDb, double GB, double Dh, BiquadCoeffs& c)
@@ -276,7 +354,7 @@ inline double analogBellDb (double f, double f0, double q, double gainDb)
 //  - Campanas anchas (Q <= 0.45): entre el diseno clasico y el "matched" (polos exactos del analogico)
 //    se usa en cada caso el que mas se parece al analogico (se miden ambos), mezclados de forma suave
 //    para que al mover cualquier perilla la curva cambie sin saltos.
-inline BiquadCoeffs makeAnalogBell (double fs, double f0, double q, double gainDb)
+inline BiquadCoeffs makeAnalogBellBase (double fs, double f0, double q, double gainDb)
 {
     f0 = safeFreq (f0, fs);
     const auto classic = makeBell (fs, f0, q, gainDb);
@@ -316,6 +394,13 @@ inline BiquadCoeffs makeAnalogBell (double fs, double f0, double q, double gainD
     BiquadCoeffs o, narrow = classic;
     if (w > 0.0 && orfanidisBell (fs, f0, gainDb, GB, Dh, o)) narrow = blendBiquad (classic, o, w);
     return wq >= 1.0 ? narrow : blendBiquad (wide, narrow, wq);
+}
+inline BiquadCoeffs makeAnalogBell (double fs, double f0, double q, double gainDb)
+{
+    const auto c = makeAnalogBellBase (fs, f0, q, gainDb);
+    if (std::abs (gainDb) < 0.01) return c;
+    const double A = std::pow (10.0, gainDb / 40.0), w0 = 2.0 * kPi * std::min (f0, fs * 0.49);
+    return lsRefine (c, { 1.0, A * w0 / q, w0 * w0, 1.0, w0 / (A * q), w0 * w0 }, fs, f0);
 }
 
 
@@ -362,7 +447,7 @@ inline double analogHighShelfDb (double f, double f0, double q, double gainDb)
 // se comprime cerca de Nyquist: un shelf en 12-16 kHz puede quedar 3-6 dB distinto). El recorte se disena
 // con polos "matched"; el realce es exactamente el inverso del recorte (como en el analogico). Se compara
 // con el clasico y se usa, mezclado suave, el que mas se parece al analogico: nunca hay saltos al mover.
-inline BiquadCoeffs makeAnalogHighShelf (double fs, double f, double q, double gainDb)
+inline BiquadCoeffs makeAnalogHighShelfBase (double fs, double f, double q, double gainDb)
 {
     f = std::clamp (f, 5.0, 2.0 * fs);            // puede estar sobre Nyquist (bandas de "aire")
     const auto classic = makeHighShelf (fs, std::min (f, fs * 0.49), q, gainDb);
@@ -394,6 +479,13 @@ inline BiquadCoeffs makeAnalogHighShelf (double fs, double f, double q, double g
     }
     return blendBiquad (classic, m, smoothRamp ((eC - eM) / 1.0 + 0.5));
 }
+inline BiquadCoeffs makeAnalogHighShelf (double fs, double f, double q, double gainDb)
+{
+    const auto c = makeAnalogHighShelfBase (fs, f, q, gainDb);
+    if (std::abs (gainDb) < 0.05) return c;
+    const double A = std::pow (10.0, gainDb / 40.0), w0 = 2.0 * kPi * f, sA = std::sqrt (A);
+    return lsRefine (c, { A * A, A * sA / q * w0, A * w0 * w0, 1.0, sA / q * w0, A * w0 * w0 }, fs, std::min (f, fs * 0.49));
+}
 
 // Pasa bajos (High Cut) sin aplastamiento: polos en el lugar exacto del analogico y el numerador ajustado
 // en DC, en Nyquist y en 0.8 x la frecuencia de corte (dentro de la banda que pasa). Asi la pendiente sobre
@@ -401,7 +493,7 @@ inline BiquadCoeffs makeAnalogHighShelf (double fs, double f, double q, double g
 // depende del Q de la seccion (las de Q alto se ajustan mas cerca del pico) para que las secciones de un
 // corte de 24-48 dB/oct no sumen un "bulto" en la zona que pasa. Una sola formula para todo el rango: al
 // barrer la frecuencia la curva cambia de forma continua, sin saltos.
-inline BiquadCoeffs makeAnalogLowPass (double fs, double f, double q)
+inline BiquadCoeffs makeAnalogLowPassBase (double fs, double f, double q)
 {
     f = safeFreq (f, fs);
     const double w0 = 2.0 * kPi * f;
@@ -414,11 +506,102 @@ inline BiquadCoeffs makeAnalogLowPass (double fs, double f, double q)
         return makeLowPass (fs, f, q);
     return c;
 }
+inline BiquadCoeffs makeAnalogLowPass (double fs, double f, double q)
+{
+    const auto c = makeAnalogLowPassBase (fs, f, q);
+    f = safeFreq (f, fs);
+    const double w0 = 2.0 * kPi * f;
+    return lsRefine (c, { 0.0, 0.0, w0 * w0, 1.0, w0 / q, w0 * w0 }, fs, f);
+}
+
+// Polos de un biquad ubicados exactamente como los del analogico (invarianza al impulso)
+inline void matchedPoles (double fs, double f, double q, double& a1, double& a2)
+{
+    const double w0 = 2.0 * kPi * f / fs, z = 0.5 / q;
+    a2 = std::exp (-2.0 * z * w0);
+    a1 = z <= 1.0 ? -2.0 * std::exp (-z * w0) * std::cos (std::sqrt (1.0 - z * z) * w0)
+                  : -2.0 * std::exp (-z * w0) * std::cosh (std::sqrt (z * z - 1.0) * w0);
+}
+
+// Pasa altos (Low Cut) sin aplastamiento (M. Vicanek, "Matched second order digital filters"): polos como el
+// analogico, doble cero en DC y la magnitud del analogico exacta en la frecuencia de corte (Q). El clasico
+// (bilineal) corta de mas cuando el corte esta en agudos: en 9 kHz a 44.1 kHz hasta 2.5 dB en la zona que se
+// oye. En graves y medios el clasico ya es exacto y se usa tal cual; en el medio se mezclan suave (sin saltos).
+inline BiquadCoeffs makeAnalogHighPassBase (double fs, double f, double q)
+{
+    f = safeFreq (f, fs);
+    const auto classic = makeHighPass (fs, f, q);
+    const double w = smoothRamp ((f / fs - 0.015) / 0.03);
+    if (w <= 0.0) return classic;
+    BiquadCoeffs c;
+    matchedPoles (fs, f, q, c.a1, c.a2);
+    const double w0 = 2.0 * kPi * f / fs;
+    const double A0 = (1.0 + c.a1 + c.a2) * (1.0 + c.a1 + c.a2), A1 = (1.0 - c.a1 + c.a2) * (1.0 - c.a1 + c.a2), A2 = -4.0 * c.a2;
+    const double p1 = std::sin (0.5 * w0) * std::sin (0.5 * w0), p0 = 1.0 - p1, p2 = 4.0 * p0 * p1;
+    const double b0 = q * std::sqrt (std::max (0.0, A0 * p0 + A1 * p1 + A2 * p2)) / (4.0 * p1);
+    c.b0 = b0; c.b1 = -2.0 * b0; c.b2 = b0;
+    if (! isStableBiquad (c) || ! std::isfinite (b0)) return classic;
+    return blendBiquad (classic, c, w);
+}
+inline BiquadCoeffs makeAnalogHighPass (double fs, double f, double q)
+{
+    const auto c = makeAnalogHighPassBase (fs, f, q);
+    f = safeFreq (f, fs);
+    const double w0 = 2.0 * kPi * f;
+    return lsRefine (c, { 1.0, 0.0, 0.0, 1.0, w0 / q, w0 * w0 }, fs, f);
+}
+
+// All Pass con la FASE del analogico tambien en agudos: polos como el analogico y ceros reflejados (magnitud
+// exactamente 1 siempre). Asi el giro de fase cae donde dice la perilla y la fase natural casi no tiene que corregir.
+inline BiquadCoeffs makeAnalogAllPass (double fs, double f, double q)
+{
+    f = safeFreq (f, fs);
+    const auto classic = makeAllPass (fs, f, q);
+    const double w = smoothRamp ((f / fs - 0.015) / 0.03);
+    if (w <= 0.0) return classic;
+    BiquadCoeffs c;
+    matchedPoles (fs, f, q, c.a1, c.a2);
+    c.b0 = c.a2; c.b1 = c.a1; c.b2 = 1.0;
+    if (! isStableBiquad (c)) return classic;
+    return blendBiquad (classic, c, w);
+}
+
+// Low Shelf sin aplastamiento: en el analogico un low shelf de +G dB es exactamente G dB por encima de un
+// high shelf de -G dB en la misma frecuencia y Q; se usa el high shelf "analogico" (ya probado) asi.
+inline BiquadCoeffs makeAnalogLowShelf (double fs, double f, double q, double gainDb)
+{
+    const auto classic = makeLowShelf (fs, f, q, gainDb);
+    const double w = smoothRamp ((std::min (f, fs * 0.49) / fs - 0.015) / 0.03);
+    if (w <= 0.0 || std::abs (gainDb) < 0.05) return classic;
+    auto c = makeAnalogHighShelf (fs, f, q, -gainDb);
+    const double g = std::pow (10.0, gainDb / 20.0);
+    c.b0 *= g; c.b1 *= g; c.b2 *= g;
+    if (! isStableBiquad (c)) return classic;
+    return blendBiquad (classic, c, w);
+}
+
+// Notch sin aplastamiento: los ceros justo en la frecuencia (corte total ahi), los polos como el analogico
+// y 0 dB en DC. El clasico estrecha y corre el lado de agudos cuando el notch esta arriba de ~5 kHz.
+inline BiquadCoeffs makeNotch (double fs, double f, double q);
+inline BiquadCoeffs makeAnalogNotch (double fs, double f, double q)
+{
+    f = safeFreq (f, fs);
+    const auto classic = makeNotch (fs, f, q);
+    const double w = smoothRamp ((f / fs - 0.015) / 0.03);
+    if (w <= 0.0) return classic;
+    BiquadCoeffs c;
+    matchedPoles (fs, f, q, c.a1, c.a2);
+    const double cw = std::cos (2.0 * kPi * f / fs);
+    const double g = (1.0 + c.a1 + c.a2) / (2.0 - 2.0 * cw);
+    c.b0 = g; c.b1 = -2.0 * cw * g; c.b2 = g;
+    if (! isStableBiquad (c) || ! std::isfinite (g)) return classic;
+    return blendBiquad (classic, c, w);
+}
 
 // Pasa-banda (0 dB en el centro) emparejado con el analogico: el lado de agudos no se "aplasta" cerca de
 // Nyquist (la bilineal pone un cero en Nyquist). Si el diseno no es estable, se usa el clasico.
 inline BiquadCoeffs makeBandPass (double fs, double f, double q);
-inline BiquadCoeffs makeAnalogBandPass (double fs, double f, double q)
+inline BiquadCoeffs makeAnalogBandPassBase (double fs, double f, double q)
 {
     f = safeFreq (f, fs);
     const double w0 = 2.0 * kPi * f;
@@ -433,6 +616,8 @@ inline BiquadCoeffs makeAnalogBandPass (double fs, double f, double q)
     if (m > 1.0e-9) { c.b0 /= m; c.b1 /= m; c.b2 /= m; }
     return c;
 }
+// (el pasa-banda queda con su diseno propio: en cascadas empinadas el ajuste por minimos cuadrados no mejora)
+inline BiquadCoeffs makeAnalogBandPass (double fs, double f, double q) { return makeAnalogBandPassBase (fs, f, q); }
 
 inline BiquadCoeffs makeBandPass (double fs, double f, double q)
 {

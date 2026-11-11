@@ -1,0 +1,553 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Gaux Equalizer — Guía de usuario</title>
+<style>
+@font-face { font-family: "Oswald"; src: url("fonts/Oswald-Bold.ttf"); font-weight: 700; }
+@font-face { font-family: "Oswald"; src: url("fonts/Oswald-Medium.ttf"); font-weight: 500; }
+@font-face { font-family: "Grotesk"; src: url("fonts/SpaceGrotesk-Regular.ttf"); font-weight: 400; }
+@font-face { font-family: "Grotesk"; src: url("fonts/SpaceGrotesk-SemiBold.ttf"); font-weight: 600; }
+@font-face { font-family: "Mono"; src: url("fonts/JetBrainsMono-Medium.ttf"); }
+@page { size: A4; margin: 0; }
+:root { --bg: #0d0809; --panel: #1a1012; --line: #3a1c21; --red: #e8202f; --red2: #ff4a57; --amber: #f2b230; --text: #efe6e3; --dim: #b8a8a6; --faint: #7d6b6a; }
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--text); font-family: "Grotesk", sans-serif; font-size: 9.6pt; line-height: 1.45; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.page { width: 210mm; min-height: 297mm; padding: 16mm 16mm 18mm; position: relative; page-break-after: always; break-after: page; overflow: hidden; }
+.page:last-child { page-break-after: auto; }
+.folio { position: absolute; bottom: 8mm; left: 16mm; right: 16mm; display: flex; justify-content: space-between; font-family: "Mono"; font-size: 7.5pt; color: var(--faint); letter-spacing: .08em; }
+h1, h2, h3 { font-family: "Oswald"; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; margin: 0; }
+h1 { font-size: 26pt; line-height: 1.05; }
+h2 { font-size: 17pt; color: var(--text); margin: 0 0 2mm; padding-bottom: 2mm; border-bottom: 2px solid var(--red); display: block; }
+h2 .num { color: var(--red); margin-right: 3mm; }
+h3 { font-size: 11.5pt; color: var(--red2); margin: 5mm 0 1.5mm; }
+p { margin: 0 0 2.4mm; }
+.lead { color: var(--dim); font-size: 10.8pt; margin-bottom: 4mm; }
+b, strong { color: #fff; font-weight: 600; }
+.k { font-family: "Mono"; font-size: 8.6pt; background: #2a1518; border: 1px solid #4a2228; border-radius: 3px; padding: 0 1.4mm; color: #ffd9d6; white-space: nowrap; }
+.btn { font-family: "Oswald"; font-weight: 500; letter-spacing: .08em; font-size: 8.8pt; color: #fff; background: #3a1419; border: 1px solid var(--red); border-radius: 10px; padding: 0 2mm; white-space: nowrap; }
+.btn.amber { border-color: var(--amber); background: #3a2a10; }
+ul { margin: 0 0 2.5mm; padding-left: 5mm; }
+li { margin-bottom: 1mm; }
+table { width: 100%; border-collapse: collapse; margin: 2mm 0 4mm; font-size: 9pt; }
+th { text-align: left; font-family: "Oswald"; font-weight: 500; letter-spacing: .06em; text-transform: uppercase; font-size: 8.5pt; color: var(--red2); border-bottom: 1px solid var(--red); padding: 1.4mm 2mm; }
+td { border-bottom: 1px solid var(--line); padding: 1.4mm 2mm; vertical-align: top; }
+td:first-child { white-space: nowrap; font-weight: 600; color: #fff; }
+.note { background: #1c1214; border-left: 3px solid var(--amber); padding: 2.5mm 3.5mm; margin: 3mm 0; color: var(--dim); font-size: 9.3pt; }
+.note b { color: var(--amber); }
+.tip { background: #1c1214; border-left: 3px solid var(--red); padding: 2.5mm 3.5mm; margin: 3mm 0; color: var(--dim); font-size: 9.3pt; }
+.tip b { color: var(--red2); }
+.cols { display: grid; grid-template-columns: 1fr 1fr; gap: 7mm; }
+.cols3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 5mm; }
+figure { margin: 2mm 0 4mm; position: relative; }
+figure img { width: 100%; display: block; border: 1px solid #2c1a1d; border-radius: 3px; }
+figcaption { font-size: 8.5pt; color: var(--faint); margin-top: 1.2mm; }
+.shot { position: relative; }
+.mk { position: absolute; width: 4.4mm; height: 4.4mm; margin: -2.2mm 0 0 -2.2mm; border-radius: 50%; background: var(--amber); color: #120a0b; font-family: "Oswald"; font-weight: 700; font-size: 6.8pt; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 0 1.2px #120a0b, 0 1px 4px rgba(0,0,0,.7); }
+.legend { columns: 2; column-gap: 7mm; font-size: 9pt; }
+.legend div { break-inside: avoid; margin-bottom: 1.2mm; display: flex; gap: 2mm; }
+.legend .n { flex: none; width: 4.6mm; height: 4.6mm; border-radius: 50%; background: var(--amber); color: #120a0b; font-family: "Oswald"; font-weight: 700; font-size: 7pt; display: flex; align-items: center; justify-content: center; margin-top: .6mm; }
+.cover { padding: 0; background: radial-gradient(ellipse at 50% 38%, #3a0a10 0%, #150708 55%, #0a0506 100%); display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+.cover img.logo { width: 128mm; filter: drop-shadow(0 4mm 8mm rgba(232,32,47,.35)); }
+.cover .eq { font-family: "Oswald"; font-weight: 500; letter-spacing: 1.2em; font-size: 15pt; color: var(--dim); margin: 6mm 0 0 1.2em; }
+.cover .t { font-family: "Oswald"; font-weight: 700; font-size: 20pt; letter-spacing: .12em; margin-top: 22mm; }
+.cover .s { color: var(--dim); margin-top: 3mm; font-size: 10.5pt; }
+.cover .by { position: absolute; bottom: 16mm; font-family: "Mono"; font-size: 8pt; color: var(--faint); letter-spacing: .1em; }
+.toc { columns: 2; column-gap: 9mm; font-size: 10pt; margin-top: 4mm; }
+.toc div { display: flex; justify-content: space-between; border-bottom: 1px dotted var(--line); padding: 1.3mm 0; break-inside: avoid; }
+.toc span:first-child b { color: var(--red2); margin-right: 2mm; }
+.step { display: flex; gap: 3mm; margin-bottom: 2mm; }
+.step .n { flex: none; width: 6mm; height: 6mm; border-radius: 50%; border: 1.5px solid var(--red); color: var(--red2); font-family: "Oswald"; font-weight: 700; display: flex; align-items: center; justify-content: center; font-size: 9pt; }
+.recipe { background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 3mm 4mm; margin-bottom: 4mm; break-inside: avoid; }
+.recipe h3 { margin-top: 0; }
+.recipe .chain { font-family: "Mono"; font-size: 8.4pt; color: #ffd9d6; margin: 1mm 0 1.5mm; }
+.crop { overflow: hidden; border: 1px solid #2c1a1d; border-radius: 3px; position: relative; }
+.crop img { border: none; display: block; }
+</style>
+</head>
+<body>
+
+<!-- PORTADA -->
+<section class="page cover">
+  <img class="logo" src="gaux.svg" alt="GAUX">
+  <div class="eq">EQUALIZER</div>
+  <div class="t">GUÍA DE USUARIO</div>
+  <div class="s">Versión 0.22 · Paramétrico de 24 bandas y Vintage GX-1 · VST3 / AU · Mac y Windows</div>
+  <div class="by">ALEKSANDER GAUX · MEDELLÍN · 2026</div>
+</section>
+
+<!-- INDICE -->
+<section class="page">
+  <h2>Contenido</h2>
+  <div class="toc">
+    <div><span><b>1</b>Qué es Gaux Equalizer</span><span>3</span></div>
+    <div><span><b>2</b>Instalación y primer uso</span><span>3</span></div>
+    <div><span><b>3</b>Recorrido por el Paramétrico</span><span>4</span></div>
+    <div><span><b>4</b>La barra superior</span><span>5</span></div>
+    <div><span><b>5</b>La pantalla: bandas y analizador</span><span>6</span></div>
+    <div><span><b>6</b>Cazar resonancias (picos)</span><span>7</span></div>
+    <div><span><b>7</b>El panel de la banda: filtros</span><span>8</span></div>
+    <div><span><b>8</b>HARMONICS: saturación por banda</span><span>9</span></div>
+    <div><span><b>9</b>DYNAMIC: EQ dinámica y espectral</span><span>10</span></div>
+    <div><span><b>10</b>La barra inferior: fase, escala, salida</span><span>11</span></div>
+    <div><span><b>11</b>MATCH, SKETCH, CHOQUE, ZONE y SC</span><span>12</span></div>
+    <div><span><b>12</b>Vintage GX-1</span><span>14</span></div>
+    <div><span><b>13</b>Recetas para producción</span><span>16</span></div>
+    <div><span><b>14</b>Atajos de teclado y mouse</span><span>18</span></div>
+    <div><span><b>15</b>Preguntas frecuentes</span><span>19</span></div>
+    <div><span><b>16</b>Especificaciones</span><span>20</span></div>
+  </div>
+  <div class="note" style="margin-top:10mm"><b>Cómo leer esta guía.</b> Los nombres de los botones aparecen así: <span class="btn">ZONE</span>; las teclas así: <span class="k">Cmd</span> + <span class="k">Z</span>. En Windows, donde dice <span class="k">Cmd</span> usa <span class="k">Ctrl</span>, y donde dice <span class="k">Alt</span> usa <span class="k">Alt</span>. Los números amarillos de las capturas corresponden a la lista que está debajo de cada una.</div>
+  <div class="tip"><b>La regla de oro.</b> Un EQ no se juzga mirando, se juzga escuchando. Usa <span class="btn">AUTO GAIN</span> o compara con <span class="btn">A</span>/<span class="btn">B</span> al mismo volumen: lo que suena "mejor" solo porque suena más fuerte engaña a todos los oídos, también a los de los ingenieros de premios.</div>
+  <div class="folio"><span>GAUX EQUALIZER · GUÍA DE USUARIO</span><span>2</span></div>
+</section>
+
+<!-- 1-2 -->
+<section class="page">
+  <h2><span class="num">1</span>Qué es Gaux Equalizer</h2>
+  <p class="lead">Un ecualizador para producir, mezclar y masterizar música electrónica (y cualquier otra), con dos caras en un mismo plugin.</p>
+  <div class="cols">
+    <div>
+      <h3>Paramétrico</h3>
+      <p>24 bandas con nueve tipos de filtro, pendientes de 6 a 96 dB/oct y BRICK, saturación por banda (cinco modos), EQ dinámica y <b>dinámica espectral</b>, canal por banda (estéreo, L, R, Mid, Side), cuatro modos de fase (mínima, <b>natural</b>, lineal y lineal HQ), EQ MATCH contra un tema de referencia, dibujar la curva a mano (SKETCH), comparar dos pistas (CHOQUE) y un analizador que muestra antes y después.</p>
+      <p>Las curvas están <b>emparejadas con el analógico</b>: un realce de aire a 12 kHz o un corte de graves en 8 kHz suenan con la forma que dibujas, también a 44.1 y 48 kHz.</p>
+    </div>
+    <div>
+      <h3>Vintage GX-1</h3>
+      <p>Un rack de tres unidades inspirado en los ecualizadores pasivos de tubos clásicos de estudio: <b>FILTER</b> (pasa altos y pasa bajos), <b>MID</b> (medios) y <b>PROGRAM</b> (graves con el famoso truco de realzar y atenuar a la vez, agudos con ancho, SOFTEN, AIR y la sección <b>TUBE</b> con GLOW e IRON). Se usa con perillas, sin mirar curvas, como el hardware.</p>
+      <p>Con <span class="btn">AVANZADO</span> puedes ver la curva exacta que suena y el analizador.</p>
+    </div>
+  </div>
+
+  <h2 style="margin-top:6mm"><span class="num">2</span>Instalación y primer uso</h2>
+  <div class="cols">
+    <div>
+      <h3>Mac (Apple Silicon e Intel)</h3>
+      <div class="step"><div class="n">1</div><div>Cierra Ableton (o tu DAW).</div></div>
+      <div class="step"><div class="n">2</div><div>Abre <b>Gaux Equalizer.pkg</b> y sigue los pasos. Instala el VST3, el AU y la app independiente (puedes elegir cuáles). Pide tu contraseña.</div></div>
+      <div class="step"><div class="n">3</div><div>Si macOS avisa que no puede verificar al desarrollador: <b>Ajustes del Sistema → Privacidad y seguridad → Abrir igualmente</b>. El archivo <i>ANTES DE INSTALAR - Mac.txt</i> lo explica con detalle.</div></div>
+      <div class="step"><div class="n">4</div><div>En Ableton: <b>Preferencias → Plug-ins → Volver a escanear</b>. Aparece en <i>Plug-ins → VST3 / Audio Units → Gaux</i>.</div></div>
+    </div>
+    <div>
+      <h3>Windows 10/11 (64 bits)</h3>
+      <div class="step"><div class="n">1</div><div>Ejecuta <b>…_Windows_Setup.exe</b>. Si SmartScreen avisa: <b>Más información → Ejecutar de todas formas</b>.</div></div>
+      <div class="step"><div class="n">2</div><div>El VST3 queda en <i>C:\Program Files\Common Files\VST3</i>. Incluye desinstalador.</div></div>
+      <div class="step"><div class="n">3</div><div>¿Sin permisos de administrador? Copia la carpeta <i>Portable\Gaux Equalizer.vst3</i> a tu carpeta de VST3.</div></div>
+      <div class="step"><div class="n">4</div><div>Vuelve a escanear los plug-ins en el DAW.</div></div>
+    </div>
+  </div>
+  <h3>Comprobar la versión instalada</h3>
+  <p>Haz <b>clic derecho en la pantalla</b> del Paramétrico: la primera línea del menú dice la versión y la fecha de compilación (por ejemplo <span class="k">Gaux EQ 0.22 - compilado Nov 11 2026</span>). Si después de actualizar ves una fecha vieja, el DAW está cargando otra copia: borra las versiones anteriores y vuelve a escanear.</p>
+  <h3>Tamaño de la ventana</h3>
+  <p>El botón de % (arriba a la derecha) cambia el tamaño de 50 % a 200 %, o arrastra la esquina inferior derecha. Al 100 % cabe en un MacBook Air de 13" también con <span class="btn">AVANZADO</span> abierto; si eliges un tamaño que no cabe en tu pantalla, el plugin se achica solo lo necesario. El tamaño se guarda con la sesión.</p>
+  <div class="folio"><span>GAUX EQUALIZER · GUÍA DE USUARIO</span><span>3</span></div>
+</section>
+
+<!-- 3 RECORRIDO -->
+<section class="page">
+  <h2><span class="num">3</span>Recorrido por el Paramétrico</h2>
+  <p class="lead">Así se ve el Paramétrico con seis bandas y la banda 2 elegida. Cada número se explica en las páginas siguientes.</p>
+  <figure><div class="shot"><img src="img/guia_parametrico.png"><!--MARKERS:param--></div></figure>
+  <div class="legend"><!--LEGEND:param--></div>
+  <div class="folio"><span>GAUX EQUALIZER · GUÍA DE USUARIO</span><span>4</span></div>
+</section>
+
+<!-- 4 BARRA SUPERIOR -->
+<section class="page">
+  <h2><span class="num">4</span>La barra superior</h2>
+  <p class="lead">Lo que está arriba sirve en los dos modos.</p>
+  <table>
+    <tr><th>Control</th><th>Qué hace</th></tr>
+    <tr><td>Encendido</td><td>Bypass de todo el plugin. Apagado, el audio pasa intacto y alineado con la latencia del plugin (prender y apagar no corre el audio ni hace clics).</td></tr>
+    <tr><td>↶ ↷</td><td>Deshacer / rehacer (<span class="k">Cmd</span>+<span class="k">Z</span>, <span class="k">Cmd</span>+<span class="k">Shift</span>+<span class="k">Z</span>). Cada movimiento con el mouse es un paso; la automatización del DAW no llena el historial.</td></tr>
+    <tr><td><span class="btn">PARAMETRIC</span> / <span class="btn">VINTAGE</span></td><td>Cambia de cara. Cada modo guarda sus propios ajustes: puedes ir y volver sin perder nada. Solo suena el modo visible.</td></tr>
+    <tr><td><span class="btn">A</span> <span class="btn">B</span> →</td><td>Dos ajustes completos para comparar al instante. La flecha copia el que suena al otro lado (A→B o B→A). Se guardan con la sesión.</td></tr>
+    <tr><td>◀ Preset ▼ ▶</td><td>Presets del modo actual (40 de fábrica: voces, baterías, bajos, sintes, buses, mastering y vintage). Las flechas pasan de uno a otro; el menú permite <b>Guardar preset…</b> en <i>Música/Gaux EQ/Presets</i>. Cargar un preset nunca cambia de modo.</td></tr>
+    <tr><td><span class="btn">MATCH</span></td><td>EQ Match contra un tema de referencia o el sidechain (página 12).</td></tr>
+    <tr><td><span class="btn">SC</span></td><td>Sidechain general: la curva entera se aplana cuando suena otra pista, por ejemplo el kick (página 13). El puntito se enciende cuando llega señal.</td></tr>
+    <tr><td><span class="btn">ZONE</span></td><td>Limita el plugin a una zona de frecuencias; lo de afuera pasa intacto (página 13).</td></tr>
+    <tr><td>La calavera</td><td>Cabecea con cada kick de la música y su ánimo refleja la saturación que de verdad está sonando: tranquila con sonido limpio, cálida con saturación moderada, enojada con saturación fuerte. Con clip la tapa sale volando. Duerme cuando no hay audio.</td></tr>
+    <tr><td><span class="btn">1x</span> <span class="btn">2x</span> <span class="btn">4x</span></td><td>Calidad (sobremuestreo). 1x es perfecto para casi todo. 2x y 4x reducen el aliasing cuando saturas fuerte agudos y hacen los filtros pegados a 20 kHz aún más exactos. Suben la CPU y agregan un poco de latencia (el DAW la compensa).</td></tr>
+    <tr><td>%</td><td>Tamaño de la interfaz (50–200 %).</td></tr>
+  </table>
+  <div class="tip"><b>A/B a conciencia.</b> Prende <span class="btn">AUTO GAIN</span> antes de comparar A y B: así la diferencia que escuchas es de color y balance, no de volumen.</div>
+  <div class="folio"><span>GAUX EQUALIZER · GUÍA DE USUARIO</span><span>5</span></div>
+</section>
+
+<!-- 5 PANTALLA -->
+<section class="page">
+  <h2><span class="num">5</span>La pantalla: bandas y analizador</h2>
+  <h3>Crear y mover bandas</h3>
+  <ul>
+    <li><b>Doble clic</b> en una zona vacía crea una banda ahí (y puedes arrastrarla de una vez). También puedes elegir una banda libre en los números de abajo.</li>
+    <li><b>Arrastrar un punto</b>: horizontal = frecuencia, vertical = ganancia. <span class="k">Shift</span> + arrastrar = ajuste fino.</li>
+    <li><b>Rueda del mouse</b> sobre un punto = Q (ancho).</li>
+    <li><b>Doble clic en un punto</b> o la <b>×</b> que aparece a su lado = borrar la banda.</li>
+    <li><b>Clic derecho en un punto</b>: tipo de filtro, <b>Bypass (0)</b>, reset, quitar saturación, borrar.</li>
+    <li><b>Varias bandas</b>: <span class="k">Shift</span> + clic en los puntos, o arrastra un recuadro en una zona vacía. Se mueven juntas; <span class="k">Supr</span> las borra; <span class="k">Cmd</span>+<span class="k">A</span> elige todas; <span class="k">Esc</span> suelta la selección.</li>
+    <li><b>Tecla <span class="k">0</span></b>: bypass de las bandas elegidas a la vez. Quedan en gris (en la pantalla y en los números de abajo) y dejan de sonar, pero siguen en su lugar. Otro <span class="k">0</span> las devuelve. Ideal para comparar "con y sin" solo un grupo de bandas.</li>
+    <li><b>Solo</b>: <span class="k">Alt</span> + clic sostenido en un punto (o los audífonos del panel) para escuchar solo la zona que toca esa banda. Entra y sale con un fundido, sin clics.</li>
+  </ul>
+  <h3>Lo que muestra la pantalla</h3>
+  <ul>
+    <li><b>Curva total</b> (blanca/roja) y <b>la curva de cada banda en su color</b> con un relleno suave. La banda elegida o bajo el mouse se resalta.</li>
+    <li><b>Analizador</b>: espectro <b>después</b> del EQ (rojo) y, si lo activas, <b>antes</b> (gris). Lo que ves es exactamente lo que suena: la curva dibujada coincide con el audio real con menos de 0.02 dB de diferencia.</li>
+    <li><b>Letra bajo el punto</b>: canal de la banda (L, R, M, S). Color: L azul, R verde, M blanco, S violeta.</li>
+    <li><b>Marcas de armónicos</b> (2H, 3H…) cuando una banda satura, y el <b>relleno ámbar</b> de la dinámica en vivo.</li>
+    <li><b>TP</b> (arriba, centro): true peak de la salida en dBTP, como lo miden los servicios de streaming. Se pone rojo sobre −1 dBTP. Clic para reiniciarlo.</li>
+    <li><b>Teclado de piano</b> (abajo): cada tecla está justo debajo de su frecuencia. Se ilumina la nota de la banda elegida. <b>Clic en una tecla = llevar la banda elegida a esa nota</b> (afinar el EQ a la tonalidad del tema, o el kick a la nota del bajo).</li>
+  </ul>
+  <div class="folio"><span>GAUX EQUALIZER · GUÍA DE USUARIO</span><span>6</span></div>
+</section>
+<section class="page">
+  <h3 style="margin-top:0">Opciones (clic derecho en una zona vacía)</h3>
+  <table>
+    <tr><td>Velocidad</td><td>Qué tan rápido se mueve el analizador (lento para ver el balance de una mezcla; rápido para ver golpes).</td></tr>
+    <tr><td>Inclinación</td><td>0 a 6 dB/oct. Con 4.5 dB/oct una mezcla bien balanceada se ve más o menos plana (como en los analizadores de mastering).</td></tr>
+    <tr><td>Antes del EQ</td><td>Muestra u oculta el espectro de entrada en gris.</td></tr>
+    <tr><td>Congelar</td><td>Deja quieto el analizador para estudiarlo.</td></tr>
+    <tr><td>Rango</td><td>Escala vertical de la curva: ±6 a ±36 dB. Usa ±6 en mastering para ver los movimientos finos.</td></tr>
+    <tr><td>Curvas por banda</td><td>Mostrar u ocultar la curva de color de cada banda.</td></tr>
+    <tr><td>Teclado de piano</td><td>Mostrar u ocultar el teclado de abajo.</td></tr>
+    <tr><td>Copiar / pegar</td><td>La curva completa, entre pistas, sesiones o proyectos (también <span class="k">Cmd</span>+<span class="k">C</span> / <span class="k">Cmd</span>+<span class="k">V</span>).</td></tr>
+    <tr><td>FPS</td><td>Muestra los cuadros por segundo de la pantalla (va a la velocidad de tu monitor: 120 en un MacBook Pro).</td></tr>
+  </table>
+  <div class="folio"><span>GAUX EQUALIZER · GUÍA DE USUARIO</span><span>6</span></div>
+</section>
+
+<!-- 6 PICOS -->
+<section class="page">
+  <h2><span class="num">6</span>Cazar resonancias (picos)</h2>
+  <p class="lead">Deja el mouse quieto sobre la pantalla: el espectro se congela, su contorno se enciende y las resonancias quedan marcadas con su nota.</p>
+  <figure><img src="img/gaux_grab.png"><figcaption>Spectrum grab: cada etiqueta muestra la nota y cuántos cents está desafinada (C#7 +07 = Do#7, 7 cents arriba).</figcaption></figure>
+  <ul>
+    <li><b>Picos principales</b>: hasta siete, uno por zona, los que más sobresalen de su entorno. Los picos menores aparecen tenues solo cuando acercas el mouse.</li>
+    <li>El punto cae <b>exactamente en la frecuencia real</b> del pico (se buscan en la misma curva que ves y se afinan con la FFT).</li>
+    <li><b>Clic en un pico</b> = domarlo: crea una campana de recorte con el ancho exacto de la resonancia y una profundidad sugerida según cuánto sobresale.</li>
+    <li><b>Arrastrar un pico</b> hacia abajo = recortarlo a mano, tanto como quieras. La pantalla sigue congelada mientras arrastras.</li>
+    <li>Donde ya hay una banda no se ofrece otro pico, así nunca se apilan dos bandas sobre la misma resonancia.</li>
+    <li>Al sacar el mouse de la pantalla, las marcas desaparecen y el analizador sigue corriendo.</li>
+  </ul>
+  <div class="tip"><b>Truco.</b> Para encontrar el "ring" de un snare o la resonancia de una voz, reproduce el fragmento problemático en loop, deja el mouse sobre la pantalla en el momento justo y mira qué nota marca. Si el pico coincide con la tonalidad del tema, quizá es la nota que quieres oír: recórtalo poco.</div>
+  <div class="folio"><span>GAUX EQUALIZER · GUÍA DE USUARIO</span><span>7</span></div>
+</section>
+
+<!-- 7 PANEL BANDA -->
+<section class="page">
+  <h2><span class="num">7</span>El panel de la banda: filtros</h2>
+  <p class="lead">Al elegir una banda aparece su panel fijo abajo, con todo lo que esa banda puede hacer.</p>
+  <figure class="crop" style="height:31mm"><img src="img/guia_parametrico.png" style="width:100%; margin-top:-74.5mm"></figure>
+  <p><b>Encendido</b> (izquierda): enciende una banda nueva; en una banda en uso es su bypass (queda en gris y conserva todo). <b>BAND n</b> y la <b>nota</b> de su frecuencia (ej. <span class="k">B1 +7c</span>). <b>Tipo de filtro</b> (nueve iconos) y, en los cortes, la <b>pendiente</b>. <b>ST · L · R · M · S</b>: canal donde actúa (estéreo, izquierdo, derecho, centro o lados). <b>Audífonos</b> = solo; <b>×</b> = borrar.</p>
+  <h3>Tipos de filtro</h3>
+  <table>
+    <tr><th>Tipo</th><th>Qué hace</th><th>Para qué</th></tr>
+    <tr><td>Bell</td><td>Campana: sube o baja una zona. Q alta = angosta.</td><td>Casi todo: quitar una resonancia, dar cuerpo, presencia.</td></tr>
+    <tr><td>Low Shelf</td><td>Sube o baja todo lo que está debajo de la frecuencia. Q sobre 0.7 agrega el "bump" clásico.</td><td>Peso del kick o del bajo; limpiar graves en voces.</td></tr>
+    <tr><td>High Shelf</td><td>Sube o baja todo lo que está arriba.</td><td>Aire, brillo, oscurecer un sinte agresivo.</td></tr>
+    <tr><td>Low Cut</td><td>Quita los graves (pasa altos). Pendientes 6, 12, 18, 24, 36, 48, 72, 96 dB/oct y BRICK (pared). Q en 12 dB/oct = resonancia del corte.</td><td>Limpiar todo lo que no es kick ni bajo; sub-bajos inútiles.</td></tr>
+    <tr><td>High Cut</td><td>Quita los agudos (pasa bajos). Mismas pendientes.</td><td>Domar hats ásperos, filtros de build-up, sonidos lo-fi.</td></tr>
+    <tr><td>Notch</td><td>Corte total y muy angosto en una frecuencia.</td><td>Zumbidos (50/60 Hz), un pitido, una resonancia fija.</td></tr>
+    <tr><td>Band Pass</td><td>Deja pasar solo una zona.</td><td>Efectos de teléfono/radio, aislar un elemento.</td></tr>
+    <tr><td>Tilt</td><td>Inclina todo el espectro sobre un pivote: lo de arriba sube y lo de abajo baja (o al revés), 0 dB en la frecuencia.</td><td>Hacer una mezcla más brillante u oscura con un solo control.</td></tr>
+    <tr><td>All Pass</td><td>No cambia la curva: solo gira la fase alrededor de la frecuencia.</td><td>Alinear la fase del kick con el bajo o de dos micrófonos.</td></tr>
+  </table>
+  <h3>FILTER: FREQ · GAIN · Q</h3>
+  <p><b>FREQ</b> de 10 Hz a 30 kHz; escribe el valor con clic en el número: acepta <span class="k">2k5</span>, <span class="k">1.2 kHz</span> o notas como <span class="k">A4</span>, <span class="k">C#2</span>, <span class="k">Eb1</span>. <b>GAIN</b> ±24 dB (en Bell, Shelf y Tilt). <b>Q</b> de 0.1 a 18. Doble clic en una perilla = valor por defecto.</p>
+  <div class="note"><b>Mid/Side.</b> Una banda en <b>M</b> toca solo el centro (kick, bajo, voz principal); en <b>S</b> solo los lados (reverbs, pads anchos). El clásico de mastering: Low Cut en <b>S</b> a 120 Hz = graves en mono, punch intacto.</div>
+  <div class="folio"><span>GAUX EQUALIZER · GUÍA DE USUARIO</span><span>8</span></div>
+</section>
+
+<!-- 8 HARMONICS -->
+<section class="page">
+  <h2><span class="num">8</span>HARMONICS: saturación por banda</h2>
+  <p class="lead">Cada Bell o Shelf puede saturar <b>solo su zona</b>: color, densidad y armónicos donde los quieres, sin ensuciar el resto.</p>
+  <table>
+    <tr><th>Modo</th><th>Carácter</th><th>Ideal para</th></tr>
+    <tr><td><span class="btn">TUBE</span></td><td>Válvula. Domina el 2.º armónico (par): calidez y cuerpo a cualquier drive.</td><td>Voces, bajos redondos, el "peso" del kick.</td></tr>
+    <tr><td><span class="btn">TAPE</span></td><td>Cinta. Satura antes y muy suave, impares suaves, agudos redondos.</td><td>Pegar un bus, domar transientes, calidez sutil.</td></tr>
+    <tr><td><span class="btn">SOFT</span></td><td>Consola. Limpio hasta la rodilla y luego redondea.</td><td>Densidad sin que se note el efecto.</td></tr>
+    <tr><td><span class="btn">HARD</span></td><td>Clip duro. Limpio hasta que muerde; serie larga de impares.</td><td>Ataque, agresividad, kicks que corten.</td></tr>
+    <tr><td><span class="btn">FUZZ</span></td><td>Silicio: pares e impares fuertes, muy agresivo.</td><td>Growls de dubstep, bajos distorsionados, efectos.</td></tr>
+  </table>
+  <ul>
+    <li><b>DRIVE</b> (0–36 dB): cuánto se empuja la zona contra el saturador. El nivel se compensa solo: al subir el drive la banda gana densidad sin hundirse ni dispararse.</li>
+    <li><b>MIX</b> (0–100 %): mezcla en paralelo entre la zona limpia y la saturada. 30–50 % es el truco de la "saturación paralela".</li>
+    <li>Con antialiasing (ADAA): en 1x ya suena limpio; para saturar fuerte en agudos usa <span class="btn">2x</span> o <span class="btn">4x</span>.</li>
+    <li>Cambiar de modo, mover el drive o el mix en plena reproducción no produce clics (fundido de 30 ms).</li>
+  </ul>
+  <div class="tip"><b>Gain staging.</b> La saturación depende de cuánto nivel llega a la banda: un drive de 9 dB sobre una pista a −20 dBFS suena mucho más limpio que sobre una a −6 dBFS. La calavera te dice cuánto está saturando de verdad.</div>
+  <div class="folio"><span>GAUX EQUALIZER · GUÍA DE USUARIO</span><span>9</span></div>
+</section>
+
+<!-- 9 DYNAMIC -->
+<section class="page">
+  <h2><span class="num">9</span>DYNAMIC: EQ dinámica y espectral</h2>
+  <p class="lead">La banda solo actúa cuando la señal de su zona supera el umbral. Todo lo dinámico se ve en ámbar.</p>
+  <figure class="crop" style="height:95mm"><img src="img/guia_dinamica.png" style="width:100%; margin-top:-9.5mm"></figure>
+  <table>
+    <tr><td><span class="btn amber">DYNAMIC</span></td><td>Prende la dinámica de la banda.</td></tr>
+    <tr><td>THRESH</td><td>Umbral (−60 a 0 dB): desde qué nivel de la zona empieza a actuar. El medidor del panel muestra el nivel de la banda (barra) y el umbral (línea blanca).</td></tr>
+    <tr><td>RANGE</td><td>Cuánto puede mover la ganancia como máximo (±24 dB). Negativo = comprime esa zona (de-esser, resonancias que aparecen a ratos); positivo = la realza cuando suena fuerte (expansión). También se arrastra con el <b>tirador ámbar</b> junto al punto.</td></tr>
+    <tr><td>ATTACK / RELEASE</td><td>Qué tan rápido actúa y vuelve (0.1–200 ms / 5–2000 ms).</td></tr>
+    <tr><td><span class="btn amber">AUTO</span></td><td>El umbral se ubica solo, justo encima del nivel medio de la banda, y lo sigue si la pista cambia de volumen.</td></tr>
+    <tr><td><span class="btn amber">EXT</span></td><td>La banda escucha a <b>otra pista</b> (sidechain). En Ableton: menú <i>Sidechain</i> del plugin → <i>Audio From</i>. Ejemplo: bajar 200 Hz del bajo solo cuando suena el kick. Si no llega señal, el medidor dice "SIN SC".</td></tr>
+    <tr><td><span class="btn amber">SPECTRAL</span></td><td>Dinámica <b>frecuencia por frecuencia</b> dentro de la banda: solo baja la frecuencia exacta que se pasa (una resonancia que aparece en una nota de la voz, la "s" de un sibilante), sin tocar lo que hay al lado. Con AUTO funciona como un supresor de resonancias. Agrega 42 ms de latencia (el DAW la compensa).</td></tr>
+  </table>
+  <div class="note"><b>En fase lineal</b> (LIN, LIN HQ) la dinámica, la saturación y el sidechain general quedan en pausa: usa MIN o NAT si necesitas que la banda reaccione.</div>
+  <div class="folio"><span>GAUX EQUALIZER · GUÍA DE USUARIO</span><span>10</span></div>
+</section>
+
+<!-- 10 BARRA INFERIOR -->
+<section class="page">
+  <h2><span class="num">10</span>La barra inferior</h2>
+  <table>
+    <tr><td>1 … 24</td><td>Las bandas. Iluminadas = en uso (en su color, con la letra de su canal); en gris = en bypass. Clic = elegir (otro clic la suelta). Un clic en un número libre te deja crear esa banda.</td></tr>
+    <tr><td><span class="btn">ANALYZER</span></td><td>Prende o apaga el analizador (apagado no gasta CPU).</td></tr>
+    <tr><td><span class="btn">AUTO GAIN</span></td><td>Compensa el cambio de volumen que produce el EQ, para comparar en igualdad. Apágalo al exportar si quieres el cambio de nivel real.</td></tr>
+    <tr><td><span class="btn">MIN</span> / NAT / LIN / LIN HQ</td><td>Modo de fase (tabla de abajo). Debajo se muestra la latencia.</td></tr>
+    <tr><td>SCALE</td><td>Escala la ganancia de todas las bandas a la vez (0–200 %). 50 % = la mitad de todo el EQ; 0 % = plano. Perfecto para decidir "cuánto" EQ al final.</td></tr>
+    <tr><td>OUT</td><td>Volumen de salida (±24 dB).</td></tr>
+    <tr><td>IN / OUT</td><td>Medidores de entrada y salida.</td></tr>
+  </table>
+  <h3>Modos de fase</h3>
+  <table>
+    <tr><th></th><th>MIN</th><th>NAT</th><th>LIN</th><th>LIN HQ</th></tr>
+    <tr><td>Fase</td><td>mínima (digital)</td><td>igual al analógico ideal hasta 20 kHz</td><td>lineal</td><td>lineal</td></tr>
+    <tr><td>Latencia (48 kHz)</td><td>0</td><td>1.3 ms (4.7 con HQ)</td><td>~171 ms</td><td>~683 ms</td></tr>
+    <tr><td>Dinámica, saturación, SC</td><td>sí</td><td>sí</td><td>en pausa</td><td>en pausa</td></tr>
+    <tr><td>Úsalo para</td><td>mezclar, tocar en vivo, todo</td><td>agudos "analógicos", buses, aire y cortes en 18–20 kHz</td><td>buses y master</td><td>master final (graves exactos)</td></tr>
+  </table>
+  <div class="note"><b>¿Cuál elijo?</b> MIN en casi todas las pistas. NAT cuando quieres que los agudos se comporten como en un EQ analógico perfecto (curva y fase idénticas, medidas con error de 0.05 dB). LIN en el master si no quieres ningún corrimiento de fase. No uses LIN en pistas que tocas en vivo.</div>
+  <div class="folio"><span>GAUX EQUALIZER · GUÍA DE USUARIO</span><span>11</span></div>
+</section>
+
+<!-- 11 HERRAMIENTAS -->
+<section class="page">
+  <h2><span class="num">11</span>MATCH, SKETCH, CHOQUE, ZONE y SC</h2>
+  <h3><span class="btn">MATCH</span> — que tu pista suene con el balance de una referencia</h3>
+  <div class="cols">
+    <div>
+      <div class="step"><div class="n">1</div><div><b>Referencia</b>: elige un tema (WAV, AIFF, FLAC, MP3…) o activa <b>SIDECHAIN</b> para usar otra pista.</div></div>
+      <div class="step"><div class="n">2</div><div><b>Aprender</b>: reproduce tu pista unos segundos (la parte más representativa, por ejemplo el drop).</div></div>
+      <div class="step"><div class="n">3</div><div>En turquesa aparece la curva que falta. Ajusta <b>AMOUNT</b> (cuánto), <b>BANDS</b> (máximo de bandas) y el detalle (suave 1/2 oct, medio 1/3, fino 1/6).</div></div>
+      <div class="step"><div class="n">4</div><div><b>Aplicar</b> crea las bandas en los lugares libres. <span class="k">Cmd</span>+<span class="k">Z</span> deshace.</div></div>
+    </div>
+    <figure><img src="img/crop_match.png"></figure>
+  </div>
+  <div class="tip"><b>Consejo.</b> Empieza con AMOUNT 50–70 % y detalle suave: el match es un punto de partida para el balance, no una copia. Compara siempre con AUTO GAIN.</div>
+  <h3><span class="btn" style="border-color:#b8e02a">SKETCH</span> — dibujar la curva</h3>
+  <p>Botón lima arriba a la izquierda de la pantalla, o <span class="k">Cmd</span> + arrastrar en una zona vacía. Dibuja con el mouse la forma que quieres: mientras dibujas ves la curva que va a quedar y dónde nacerán las bandas (rombos). Al soltar, la tinta se evapora y aparecen las bandas. Fuera de lo que dibujaste no cambia nada. <span class="k">Esc</span> cancela.</p>
+  <h3><span class="btn">CHOQUE</span> — dos pistas que se tapan</h3>
+  <p>Compara esta pista con otra que tenga un Gaux (kick vs bajo, voz vs sintes). El espectro de la otra aparece en su color y las zonas donde se tapan quedan <b>rayadas</b> abajo. <b>Clic en una zona rayada</b> = abrir espacio en esta pista con una campana suave. Los nombres llegan del DAW o los pones tú desde el menú del botón. Si nadie está mirando, no gasta CPU.</p>
+  <div class="folio"><span>GAUX EQUALIZER · GUÍA DE USUARIO</span><span>12</span></div>
+</section>
+
+<section class="page">
+  <h3 style="margin-top:0"><span class="btn">ZONE</span> — limitar el EQ a una zona de frecuencias</h3>
+  <p>Al prenderlo aparecen dos pestañas en los bordes de la pantalla. El plugin entero (EQ, saturación, dinámica y también el Vintage) solo actúa <b>entre</b> las dos pestañas; lo de afuera queda rayado y pasa <b>intacto</b>, con la fase limpia. La separación es sin pérdida: con todo plano, ZONE prendido o apagado suena idéntico.</p>
+  <ul>
+    <li><b>Proteger el sub</b>: zona de 120 Hz a 20 kHz y satura o realza los medios del kick sin tocar su sub.</li>
+    <li><b>Solo graves</b>: zona de 20 a 300 Hz y usa el truco del PROGRAM del Vintage sin que el tubo ensucie los hats.</li>
+    <li>Ojo: un control que actúe fuera de la zona no se va a escuchar.</li>
+  </ul>
+  <h3><span class="btn">SC</span> — sidechain general</h3>
+  <figure style="width:62%"><img src="img/crop_sc.png"></figure>
+  <table>
+    <tr><td>ON</td><td>Lo prende. Cuando suena la otra pista (por ejemplo el kick), toda la curva del EQ se aplana y vuelve al soltar. En el Paramétrico además todas las bandas dinámicas escuchan al sidechain.</td></tr>
+    <tr><td>DUCK</td><td>Cuánto se aplana (100 % = queda plana mientras suena el kick).</td></tr>
+    <tr><td>THRESH</td><td>Desde qué nivel del sidechain actúa. Truco: unos 8 dB debajo del pico del kick y la curva se aplana del todo en cada golpe.</td></tr>
+    <tr><td>RELEASE</td><td>Cuánto tarda en volver después de cada golpe (corto para techno rápido, largo para un "pumping" lento).</td></tr>
+  </table>
+  <p>En Ableton: sección <i>Sidechain</i> del dispositivo → <i>Audio From</i> → la pista del kick. El puntito del botón se enciende cuando llega señal y la barrita amarilla muestra cuánto está actuando.</p>
+  <div class="tip"><b>Ejemplo clásico de tech house.</b> En el bajo, una Bell +3 dB a 60 Hz con SC desde el kick, DUCK 100 % y RELEASE 90 ms: el bajo tiene peso entre kicks y le deja el sub al kick en cada golpe.</div>
+  <div class="folio"><span>GAUX EQUALIZER · GUÍA DE USUARIO</span><span>13</span></div>
+</section>
+
+<!-- 12 VINTAGE -->
+<section class="page">
+  <h2><span class="num">12</span>Vintage GX-1</h2>
+  <p class="lead">Tres unidades de rack. Cada una tiene su interruptor <b>IN</b> y su piloto rojo para compararla encendida y apagada. Las perillas cambian la curva de forma continua y los selectores se pueden girar en plena reproducción sin clics.</p>
+  <figure><div class="shot"><img src="img/guia_vintage.png"><!--MARKERS:vintage--></div></figure>
+  <div class="legend"><!--LEGEND:vintage--></div>
+  <div class="folio"><span>GAUX EQUALIZER · GUÍA DE USUARIO</span><span>14</span></div>
+</section>
+
+<section class="page">
+  <h3 style="margin-top:0">FILTER (arriba, con el logo)</h3>
+  <table>
+    <tr><td>LOW CUT</td><td>Pasa altos: OFF, 50, 80, 100, 150, 250, 500, 750 Hz, 1, 1.5, 2 kHz. 12 dB/oct, curva suave de filtro pasivo.</td></tr>
+    <tr><td>HIGH CUT</td><td>Pasa bajos: 1.5 a 15 kHz u OFF.</td></tr>
+    <tr><td>OUTPUT</td><td>Volumen de salida ±24 dB.</td></tr>
+    <tr><td>POWER</td><td>Bypass de todo el Vintage.</td></tr>
+    <tr><td>AVANZADO</td><td>Despliega debajo la curva exacta de las tres unidades y el analizador (ahí también se ajusta ZONE). La curva es lo que suena, verificado con tonos de prueba con diferencias menores a 0.2 dB.</td></tr>
+  </table>
+  <h3>MID (medios)</h3>
+  <table>
+    <tr><td>LOW PEAK</td><td>Realza medios-graves: 200, 300, 500, 700 Hz o 1 kHz. PUSH 0–10. Cuerpo en voces y guitarras.</td></tr>
+    <tr><td>DIP</td><td>Recorta medios: de 200 Hz a 7 kHz. CUT 0–10. Quitar "caja" (300–500 Hz) o dureza (2–4 kHz).</td></tr>
+    <tr><td>HIGH PEAK</td><td>Realza medios-agudos: 1.5, 2, 3, 4 o 5 kHz. PUSH 0–10. Presencia, ataque.</td></tr>
+  </table>
+  <h3>PROGRAM (el clásico)</h3>
+  <table>
+    <tr><td>LOW FREQUENCY</td><td>20, 30, 60 o 100 Hz. <b>PUSH</b> realza hasta +13.5 dB; <b>CUT</b> atenúa hasta −17.5 dB, como el equipo original.</td></tr>
+    <tr><td>El truco de graves</td><td>PUSH y CUT a la vez: con 60 Hz, PUSH 5 + CUT 3 da una joroba de +3.6 dB en ~70 Hz y un hueco suave de −1 dB en ~215 Hz. Sub profundo y pegado, sin embarrar. Como el original, no deja pasar DC ni subsónicos.</td></tr>
+    <tr><td>HIGH FREQUENCY</td><td>Realce de 3 a 16 kHz (PUSH) con <b>WIDTH</b> de SHARP (angosto) a BROAD (ancho).</td></tr>
+    <tr><td>SOFTEN</td><td>Atenúa agudos en 5, 10 o 20 kHz. Combinado con HIGH PUSH da el "brillo sedoso" clásico.</td></tr>
+    <tr><td>AIR</td><td>Brillo extra muy abierto (2.5 a 40 kHz). Propio de GAUX.</td></tr>
+    <tr><td>TUBE · GLOW</td><td>Saturación de válvula: 2.º armónico, calidez. Casi limpia con señal baja y más color cuanto más fuerte entras.</td></tr>
+    <tr><td>TUBE · IRON</td><td>Transformador: satura sobre todo los graves con armónicos pares; pegada y peso. Los agudos casi no se tocan.</td></tr>
+  </table>
+  <div class="folio"><span>GAUX EQUALIZER · GUÍA DE USUARIO</span><span>16</span></div>
+</section>
+<section class="page">
+  <h3 style="margin-top:0">AVANZADO: ver lo que suena</h3>
+  <figure><img src="img/guia_vintage_avanzado.png"><figcaption>Con AVANZADO abierto, debajo del rack aparece la curva de las tres unidades (naranja) sobre el analizador. Es exactamente lo que suena.</figcaption></figure>
+  <h3>Trucos del Vintage</h3>
+  <ul>
+    <li><b>Compara cada unidad</b> con su interruptor IN: es la forma más rápida de saber si de verdad ayuda.</li>
+    <li><b>Gain staging analógico</b>: GLOW e IRON reaccionan al nivel que entra. Si no notas el color, sube el nivel de la pista (o baja el fader después); si es demasiado, bájalo.</li>
+    <li><b>Sub con ZONE</b>: limita la zona de 20 a 300 Hz y usa el truco de PUSH + CUT del PROGRAM solo en los graves.</li>
+    <li><b>Brillo sedoso</b>: HIGH FREQUENCY 10 kHz, PUSH 3, WIDTH hacia BROAD, y SOFTEN 20 kHz en 2: realza la presencia sin aspereza arriba.</li>
+    <li><b>Voces al frente</b>: DIP 300 Hz en 2 y HIGH PEAK 3 kHz en 2.</li>
+  </ul>
+  <div class="folio"><span>GAUX EQUALIZER · GUÍA DE USUARIO</span><span>15</span></div>
+</section>
+
+<!-- 13 RECETAS -->
+<section class="page">
+  <h2><span class="num">13</span>Recetas para producción</h2>
+  <p class="lead">Puntos de partida. Cada mezcla es distinta: ajusta escuchando, con AUTO GAIN encendido para comparar justo.</p>
+  <div class="cols">
+    <div>
+      <div class="recipe"><h3>Kick tech house</h3>
+        <div class="chain">Low Cut 24 dB · 28 Hz | Bell +2.5 dB · 55–65 Hz (afínalo a la nota con el piano) · Q 1.2 · TUBE 6 dB | Bell −3 dB · 250–350 Hz · Q 2 | Bell +2 dB · 3–5 kHz · Q 1.5</div>
+        <p>El primer Bell da peso afinado; el recorte en 300 Hz quita la "caja"; el último da el click que corta en el club.</p></div>
+      <div class="recipe"><h3>Bajo que deja respirar al kick</h3>
+        <div class="chain">Low Cut 12 dB · 30 Hz | Bell +2 dB · 80 Hz · DYNAMIC · EXT (kick) · RANGE −6 · ATTACK 2 ms · RELEASE 80 ms | Low Cut en S · 150 Hz</div>
+        <p>El bajo baja solo cuando suena el kick; los graves quedan en mono.</p></div>
+      <div class="recipe"><h3>Voz principal</h3>
+        <div class="chain">Low Cut 18 dB · 90 Hz | Bell −2 dB · 300 Hz · Q 1.4 | Bell −3 dB · 6–8 kHz · DYNAMIC · SPECTRAL · AUTO (de-esser) | High Shelf +2 dB · 10 kHz · NAT</div>
+        <p>Para buscar resonancias: deja el mouse sobre la pantalla en la frase problemática y doma el pico que marca.</p></div>
+    </div>
+    <div>
+      <div class="recipe"><h3>Hats y percusión</h3>
+        <div class="chain">Low Cut 24 dB · 400–600 Hz | High Shelf −2 dB · 12 kHz o High Cut 12 dB · 16 kHz si son ásperos | Bell −2 dB en la resonancia que marque el analizador</div></div>
+      <div class="recipe"><h3>Growl de dubstep</h3>
+        <div class="chain">Bell +4 dB · 800 Hz · Q 1 · FUZZ 14 dB · MIX 60 % | Bell +3 dB · 2.5 kHz · HARD 10 dB | Low Cut en S · 200 Hz | HQ 2x</div>
+        <p>La saturación por banda da mordida solo en los medios; el sub queda limpio.</p></div>
+      <div class="recipe"><h3>Bus de batería</h3>
+        <div class="chain">Vintage: LOW 60 Hz · PUSH 4 · CUT 2 | HIGH 10 kHz · PUSH 3 · BROAD | IRON 30 %</div></div>
+      <div class="recipe"><h3>Master</h3>
+        <div class="chain">Fase LIN o NAT | Low Cut en S · 120 Hz | Bell −1 dB · 250 Hz · Q 0.8 | High Shelf +1 dB · 12 kHz · Q 0.6 | RANGO de la pantalla ±6 dB | AUTO GAIN</div>
+        <p>Movimientos de 0.5 a 1.5 dB. Si necesitas más, el problema está en la mezcla.</p></div>
+    </div>
+  </div>
+  <div class="folio"><span>GAUX EQUALIZER · GUÍA DE USUARIO</span><span>16</span></div>
+</section>
+
+<section class="page">
+  <h3 style="margin-top:0">Flujo de trabajo recomendado</h3>
+  <div class="step"><div class="n">1</div><div><b>Limpia primero.</b> Low Cut en todo lo que no necesita graves (voces, sintes, hats, FX). Es lo que más claridad da a una mezcla de electrónica.</div></div>
+  <div class="step"><div class="n">2</div><div><b>Recorta antes de realzar.</b> Busca resonancias con el mouse quieto sobre la pantalla y domalas con un clic; muchas veces quitar 300 Hz da más presencia que subir 3 kHz.</div></div>
+  <div class="step"><div class="n">3</div><div><b>Resuelve choques.</b> Usa CHOQUE entre kick y bajo, voz y sintes; o la dinámica con EXT para que un elemento le deje espacio a otro solo cuando hace falta.</div></div>
+  <div class="step"><div class="n">4</div><div><b>Color al final.</b> Saturación por banda o el Vintage en buses y elementos que necesitan carácter.</div></div>
+  <div class="step"><div class="n">5</div><div><b>Compara justo.</b> AUTO GAIN, A/B, el bypass de bandas con <span class="k">0</span> y SCALE para decidir cuánto EQ dejar.</div></div>
+  <div class="step"><div class="n">6</div><div><b>Revisa en referencia.</b> MATCH contra un tema que te guste para ver si tu balance va por buen camino.</div></div>
+  <div class="note" style="margin-top:6mm"><b>Gain staging.</b> Deja la pista entre −18 y −10 dBFS de promedio antes del Gaux: así la saturación y la dinámica responden como fueron calibradas, y el TP te avisa si el master pasa de −1 dBTP.</div>
+  <div class="folio"><span>GAUX EQUALIZER · GUÍA DE USUARIO</span><span>17</span></div>
+</section>
+
+<!-- 14 ATAJOS -->
+<section class="page">
+  <h2><span class="num">14</span>Atajos de teclado y mouse</h2>
+  <table>
+    <tr><th>Acción</th><th>Resultado</th></tr>
+    <tr><td>Doble clic en zona vacía</td><td>Crea una banda (y puedes arrastrarla de una vez)</td></tr>
+    <tr><td>Arrastrar un punto</td><td>Frecuencia y ganancia</td></tr>
+    <tr><td><span class="k">Shift</span> + arrastrar</td><td>Ajuste fino</td></tr>
+    <tr><td>Rueda sobre un punto</td><td>Q (ancho)</td></tr>
+    <tr><td>Doble clic en un punto</td><td>Borra la banda</td></tr>
+    <tr><td>Clic derecho en un punto</td><td>Tipo, bypass, reset, quitar saturación, borrar</td></tr>
+    <tr><td><span class="k">Alt</span> + clic sostenido en un punto</td><td>Solo de esa banda</td></tr>
+    <tr><td><span class="k">Shift</span> + clic / recuadro en zona vacía</td><td>Elegir varias bandas (se mueven juntas)</td></tr>
+    <tr><td><span class="k">Cmd</span> + <span class="k">A</span></td><td>Elegir todas las bandas</td></tr>
+    <tr><td><span class="k">0</span></td><td>Bypass de las bandas elegidas (otra vez = vuelven)</td></tr>
+    <tr><td><span class="k">Supr</span> / <span class="k">⌫</span></td><td>Borrar las bandas elegidas</td></tr>
+    <tr><td><span class="k">Esc</span></td><td>Soltar la selección / cancelar SKETCH</td></tr>
+    <tr><td><span class="k">Cmd</span> + <span class="k">Z</span> · <span class="k">Cmd</span> + <span class="k">Shift</span> + <span class="k">Z</span></td><td>Deshacer · rehacer</td></tr>
+    <tr><td><span class="k">Cmd</span> + <span class="k">C</span> · <span class="k">Cmd</span> + <span class="k">V</span></td><td>Copiar · pegar la curva</td></tr>
+    <tr><td><span class="k">Cmd</span> + arrastrar en zona vacía</td><td>Dibujar la curva (SKETCH)</td></tr>
+    <tr><td>Mouse quieto sobre la pantalla</td><td>Congela el espectro y marca las resonancias con su nota</td></tr>
+    <tr><td>Clic / arrastrar un pico marcado</td><td>Domar / recortar esa resonancia</td></tr>
+    <tr><td>Clic en una zona rayada (CHOQUE)</td><td>Abrir espacio para la otra pista</td></tr>
+    <tr><td>Clic en una tecla del piano</td><td>Llevar la banda elegida a esa nota</td></tr>
+    <tr><td>Clic en el número de una perilla</td><td>Escribir el valor (frecuencias también como notas: A4, C#2)</td></tr>
+    <tr><td>Doble clic en una perilla</td><td>Valor por defecto</td></tr>
+    <tr><td>Clic derecho en zona vacía</td><td>Opciones del analizador y de la pantalla</td></tr>
+    <tr><td>Clic en TP</td><td>Reiniciar el true peak</td></tr>
+    <tr><td>Esquina inferior derecha</td><td>Arrastrar para cambiar el tamaño</td></tr>
+  </table>
+  <div class="note"><b>Ableton y el teclado.</b> Para que las teclas (0, Supr, Cmd+Z…) lleguen al plugin, haz clic una vez en la pantalla del Gaux antes de usarlas; si no, Ableton las toma para sí.</div>
+  <div class="folio"><span>GAUX EQUALIZER · GUÍA DE USUARIO</span><span>18</span></div>
+</section>
+
+<!-- 15 FAQ -->
+<section class="page">
+  <h2><span class="num">15</span>Preguntas frecuentes</h2>
+  <h3>No veo los cambios de la versión nueva</h3>
+  <p>El DAW está cargando una copia vieja. Revisa la fecha de compilación con clic derecho en la pantalla. En Mac borra las copias de <i>/Library/Audio/Plug-Ins/VST3</i>, <i>/Library/Audio/Plug-Ins/Components</i> y las mismas carpetas dentro de tu usuario; instala el .pkg nuevo y vuelve a escanear.</p>
+  <h3>Una perilla "no hace nada"</h3>
+  <ul>
+    <li>¿Está prendido <span class="btn">ZONE</span>? Lo que cae fuera de la zona no se procesa.</li>
+    <li>¿La banda está en bypass (gris)? Presiona <span class="k">0</span> o su botón de encendido.</li>
+    <li>¿Estás en LIN o LIN HQ? La dinámica y la saturación están en pausa en fase lineal.</li>
+    <li>¿La saturación no se nota? Llega poco nivel a esa zona: sube el DRIVE o el nivel de la pista.</li>
+    <li>¿EXT no reacciona? Elige la pista en el menú <i>Sidechain</i> del plugin en Ableton.</li>
+  </ul>
+  <h3>Escucho una diferencia de volumen al comparar</h3>
+  <p>Prende <span class="btn">AUTO GAIN</span>. Un EQ que realza sube el volumen y engaña al oído.</p>
+  <h3>¿Por qué hay latencia?</h3>
+  <p>MIN no tiene latencia. NAT agrega 1.3 ms, SPECTRAL 42 ms, LIN unos 171 ms y HQ unas pocas muestras. El DAW la compensa sola; solo evita LIN en pistas que tocas en vivo.</p>
+  <h3>¿Cuánta CPU gasta?</h3>
+  <p>Con 4 bandas típicas, alrededor de 0.25 % de un núcleo (unas 400 instancias por núcleo). Con la ventana cerrada no gasta en el analizador, las bandas apagadas no cuestan nada y una pista en silencio "duerme". Deja HQ y fase lineal para el master y los buses.</p>
+  <h3>¿Es seguro para el master?</h3>
+  <p>Sí. Si un plugin anterior manda un valor inválido (NaN o infinito), el Gaux lo convierte en silencio y sigue sonando normal. Valida con pluginval al nivel máximo de exigencia en Mac y Windows.</p>
+  <h3>¿Puedo usar mis sesiones viejas?</h3>
+  <p>Sí. Las sesiones y presets de versiones anteriores abren igual.</p>
+  <div class="folio"><span>GAUX EQUALIZER · GUÍA DE USUARIO</span><span>19</span></div>
+</section>
+
+<!-- 16 SPECS -->
+<section class="page">
+  <h2><span class="num">16</span>Especificaciones</h2>
+  <table>
+    <tr><td>Formatos</td><td>VST3 y Audio Unit (Mac, universal Apple Silicon + Intel), VST3 (Windows 64 bits), app independiente</td></tr>
+    <tr><td>Frecuencias de muestreo</td><td>44.1 a 192 kHz</td></tr>
+    <tr><td>Bandas</td><td>24 (Paramétrico) · 3 unidades (Vintage)</td></tr>
+    <tr><td>Tipos de filtro</td><td>Bell, Low/High Shelf, Low/High Cut (6–96 dB/oct y BRICK), Notch, Band Pass, Tilt, All Pass</td></tr>
+    <tr><td>Fidelidad de curvas</td><td>Emparejadas con el analógico también a 44.1/48 kHz. Fase natural: idéntica al analógico ideal hasta 20 kHz (error medido 0.05 dB)</td></tr>
+    <tr><td>Saturación</td><td>Tube, Tape, Soft, Hard, Fuzz por banda; antialiasing ADAA; sobremuestreo 2x/4x</td></tr>
+    <tr><td>Dinámica</td><td>Por banda: threshold, range ±24 dB, attack, release, auto, sidechain externo, espectral</td></tr>
+    <tr><td>Fase</td><td>Mínima (0 latencia), natural (1.3 ms), lineal (~171 ms), lineal HQ (~683 ms) a 48 kHz</td></tr>
+    <tr><td>Medición</td><td>Analizador antes/después, true peak (dBTP), medidores de entrada/salida</td></tr>
+    <tr><td>Presets</td><td>40 de fábrica + los tuyos en <i>Música/Gaux EQ/Presets</i></td></tr>
+    <tr><td>Pruebas</td><td>Más de 1100 comprobaciones automáticas: sesiones de 14 géneros, cada tipo de banda contra el analógico de libro, los 183 controles de la interfaz, 260 ajustes de regresión, pluginval al nivel 10 en Mac y Windows</td></tr>
+  </table>
+  <h3>Créditos y licencia</h3>
+  <p>Diseño, concepto y sonido: <b>Aleksander Gaux</b> (Medellín, Colombia). Desarrollado con JUCE. Tipografías Oswald, Space Grotesk, Syne y JetBrains Mono (licencia OFL). Consulta <i>LICENCIA.txt</i> y el código fuente incluido en el paquete.</p>
+  <p>Comentarios y fallas: <b>gauxaleksander@gmail.com</b></p>
+  <div style="text-align:center; margin-top:18mm"><img src="gaux.svg" style="width:60mm"><div style="font-family:Oswald; letter-spacing:1em; color:var(--dim); margin-top:3mm; padding-left:1em">EQUALIZER</div></div>
+  <div class="folio"><span>GAUX EQUALIZER · GUÍA DE USUARIO</span><span>20</span></div>
+</section>
+
+<script>
+(function(){
+  const pages=[...document.querySelectorAll('.page')];
+  pages.forEach((p,i)=>{ const f=p.querySelector('.folio span:last-child'); if(f) f.textContent=i+1; });
+  const nums={};
+  pages.forEach((p,i)=>{ p.querySelectorAll('h2 .num').forEach(n=>{ if(!(n.textContent in nums)) nums[n.textContent]=i+1; }); });
+  document.querySelectorAll('.toc div').forEach(d=>{ const k=d.querySelector('b').textContent; const t=d.querySelector('span:last-child'); if(nums[k]) t.textContent=nums[k]; });
+})();
+</script>
+</body>
+</html>

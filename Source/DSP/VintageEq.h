@@ -94,11 +94,11 @@ inline int designVintage (const VintageSettings& v, double fs, BiquadCoeffs* out
     const double q = 2.5 * std::pow (0.16, v.highBandwidth / 10.0);
     out[2] = makeMatchedBell (fs, highF, q, v.highBoost * 1.8);
 
-    // Atenuacion de agudos (SOFTEN): shelf de hasta -16 dB
-    out[3] = makeAnalogHighShelf (fs, attF, 0.5, -v.highAtten * 1.6);
+    // Atenuacion de agudos (SOFTEN): shelf de hasta -16 dB (diseno de siempre: el sonido del Vintage no cambia)
+    out[3] = makeAnalogHighShelfBase (fs, attF, 0.5, -v.highAtten * 1.6);
 
     // Banda de aire: shelf muy suave y abierto
-    out[4] = makeAnalogHighShelf (fs, airF, 0.4, v.airGain);
+    out[4] = makeAnalogHighShelfBase (fs, airF, 0.4, v.airGain);
 
     // MID: campanas anchas y musicales (el realce se ensancha un poco al subirlo, como en los pasivos)
     const double lmF = kVLmFreqs[std::clamp (v.lmFreq, 0, kNumVLmFreqs - 1)];

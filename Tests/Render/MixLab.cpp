@@ -3547,6 +3547,92 @@ static void bypassSoloTests()
     }
 }
 
+// ============================================================================
+// AUDITORIA v0.22: cada tipo de banda contra la formula del EQ analogico de libro (independiente del
+// codigo del plugin), midiendo el AUDIO real (respuesta al impulso) en una grilla de ajustes
+// ============================================================================
+static CurveCheck audioVsIdeal (const Move& m, double fs, char d, double fmax)
+{
+    const size_t pre = (size_t) (0.1 * fs), N = (size_t) 1 << 17;
+    St in (pre + N);
+    const double a = 0.25;
+    in.l[pre] = a; in.r[pre] = d == 'L' ? 0.0 : a;
+    Move mm = m; mm.autoGain = false; mm.check = nullptr;
+    const auto rr = runMove (mm, in, fs, 512, false);
+    std::vector<Cx> Y (N);
+    // (sin correr por la latencia: la fase natural tiene pre-respuesta; la magnitud no depende del retardo)
+    for (size_t i = 0; i < N; ++i) { const size_t j = pre + i; Y[i] = j < rr.out.size() ? (d == 'L' ? rr.out.l[j] : 0.5 * (rr.out.l[j] + rr.out.r[j])) : 0.0; }
+    fft (Y);
+    CurveCheck c;
+    for (double f = 20.0; f <= fmax; f *= std::pow (2.0, 1.0 / 48.0))
+    {
+        const size_t k = (size_t) std::llround (f * N / fs);
+        const double meas = std::abs (Y[k]) / a / rr.outGain;
+        const double ex = idealCurve (rr, k * fs / N, d) / rr.outGain;
+        if (ex < 0.03) continue;
+        const double dev = ex >= 0.1 ? dB (meas) - dB (ex) : (meas - ex >= 0 ? 1.0 : -1.0) * dB (1.0 + std::abs (meas - ex) / 0.1);
+        ++c.pts;
+        if (std::abs (dev) > std::abs (c.maxDev)) { c.maxDev = dev; c.fAt = f; }
+    }
+    return c;
+}
+
+static void auditTests()
+{
+    if (gFilter.isNotEmpty() && ! juce::String ("auditoria").contains (gFilter)) return;
+    std::cout << "\n== AUDITORIA v0.22: CADA TIPO DE BANDA CONTRA EL ANALOGICO DE LIBRO ==" << std::endl;
+    struct TypeDef { const char* name; std::function<Band (double f, double g, double q)> make; bool usesGain; };
+    const std::vector<TypeDef> types = {
+        { "Bell", [] (double f, double g, double q) { return bell (f, g, q); }, true },
+        { "Low Shelf", [] (double f, double g, double q) { return lshelf (f, g, std::min (q, 2.0)); }, true },
+        { "High Shelf", [] (double f, double g, double q) { return hshelf (f, g, std::min (q, 2.0)); }, true },
+        { "Low Cut 12", [] (double f, double, double q) { return lcut (f, 0, q); }, false },
+        { "Low Cut 24", [] (double f, double, double) { return lcut (f, 1); }, false },
+        { "Low Cut 6/18/48", [] (double f, double, double q) { return lcut (f, q < 0.7 ? 4 : q < 2 ? 5 : 3); }, false },
+        { "High Cut 12", [] (double f, double, double q) { return hcut (f, 0, q); }, false },
+        { "High Cut 24", [] (double f, double, double) { return hcut (f, 1); }, false },
+        { "High Cut 6/18/48", [] (double f, double, double q) { return hcut (f, q < 0.7 ? 4 : q < 2 ? 5 : 3); }, false },
+        { "Notch", [] (double f, double, double q) { return notch (f, q); }, false },
+        { "Band Pass", [] (double f, double, double q) { return bpass (f, q); }, false },
+        { "Tilt", [] (double f, double g, double) { return tilt (f, g); }, true },
+        { "All Pass", [] (double f, double, double q) { return apass (f, q); }, false },
+    };
+    const double freqs[] = { 40, 160, 700, 3000, 9000, 15000 };
+    const double gains[] = { -12, 6, 15 };
+    const double qs[] = { 0.5, 1.0, 4.0 };
+    for (int ph : { 0, 3 })
+        for (double fs : { 44100.0, 96000.0 })
+        {
+            std::cout << "  " << (ph == 3 ? "fase NATURAL" : "fase minima") << " a " << fs / 1000.0 << " kHz:" << std::endl;
+            for (auto& t : types)
+            {
+                double worst = 0, wf = 0, wF = 0, wG = 0, wQ = 0, top = 0; int n = 0;
+                for (double f : freqs)
+                    for (double g : (t.usesGain ? std::vector<double> (std::begin (gains), std::end (gains)) : std::vector<double> { 0 }))
+                        for (double q : qs)
+                        {
+                            Move m; m.track = "X"; m.phase = ph; m.bands = { t.make (f, g, q) };
+                            const auto c = audioVsIdeal (m, fs, 'L', ph == 0 && fs < 50000 ? 16000.0 : std::min (20000.0, fs * 0.45));
+                            ++n;
+                            if (f > 10000.0) { if (std::abs (c.maxDev) > std::abs (top)) top = c.maxDev; continue; }
+                            if (std::abs (c.maxDev) > std::abs (worst)) { worst = c.maxDev; wf = c.fAt; wF = f; wG = g; wQ = q; }
+                        }
+                // fase minima a 44.1/48 kHz: un EQ digital sin sobremuestreo no puede ser identico al analogico pegado a
+                // Nyquist; el Gaux lo corrige ("emparejado con el analogico") y la fase NATURAL lo hace exacto
+                double tol = ph == 3 ? 0.3 : (fs < 50000 ? 1.0 : 0.5);
+                juce::String why;
+                // limites conocidos (documentados en la guia): el pasa-banda de fase minima cerca de Nyquist (en NAT es
+                // exacto) y la fase natural justo en 20 Hz con un corte resonante en 40 Hz (resolucion del FIR corto)
+                if (ph == 0 && juce::String (t.name) == "Band Pass") { tol = fs < 50000 ? 2.0 : 1.0; why = " [pasa-banda en fase minima: en NAT es exacto]"; }
+                if (ph == 3 && wf < 30.0) { tol = 0.5; why = " [20-30 Hz en fase natural]"; }
+                report (juce::String (t.name) + ": " + juce::String (n) + " ajustes, bandas hasta 10 kHz: peor diferencia con el analogico " + juce::String (worst, 2) + " dB en "
+                        + juce::String (wf, 0) + " Hz (banda en " + juce::String (wF, 0) + " Hz, " + juce::String (wG, 0) + " dB, Q " + juce::String (wQ, 1) + "); banda en 15 kHz: "
+                        + juce::String (top, 2) + " dB" + why,
+                        std::abs (worst) < tol);
+            }
+        }
+}
+
 static void stressTests()
 {
     if (gFilter == "dbgbrick")
@@ -4282,6 +4368,7 @@ int main (int argc, char** argv)
     benchTests();
     stressTests();
     bypassSoloTests();
+    auditTests();
     std::cout << "\nRESUMEN: " << gChecks << " comprobaciones, " << gFails << " fallas, " << gWarn << " avisos" << std::endl;
     return gFails == 0 ? 0 : 1;
 }

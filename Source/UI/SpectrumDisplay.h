@@ -182,6 +182,9 @@ private:
     LayerCache bgLayer, glowLayer, glassLayer;
     bool vintageMode = false;
     int selectedBand = 0;
+public:
+    int getSelectedBand() const { return selectedBand; }
+private:
     int hoverBand = -1;
     int dragBand = -1;
     int justCreated = -1;

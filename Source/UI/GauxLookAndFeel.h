@@ -98,6 +98,14 @@ namespace Colours
 class GauxLookAndFeel : public juce::LookAndFeel_V4
 {
 public:
+    // Solo para las pruebas automaticas (sin ventanas reales): los menus se abren dentro de este componente
+    static inline juce::Component* menuParentForTests = nullptr;
+    juce::Component* getParentComponentForMenuOptions (const juce::PopupMenu::Options& o) override
+    {
+        if (menuParentForTests != nullptr) return menuParentForTests;
+        return juce::LookAndFeel_V4::getParentComponentForMenuOptions (o);
+    }
+
     GauxLookAndFeel()
     {
         setColour (juce::ResizableWindow::backgroundColourId, Colours::ink);

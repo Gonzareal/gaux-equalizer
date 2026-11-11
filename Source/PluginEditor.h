@@ -219,6 +219,7 @@ public:
     void mouseWheelMove (const juce::MouseEvent&, const juce::MouseWheelDetails&) override;
 
     void selectBand (int b);
+    int getSelectedBand() const { return selectedBand; }
     void setAdvanced (bool open);
     gaux::Mascot& getMascot() { return mascot; }
     // 100 % = kBaseScale del diseno (cabe en la pantalla de un MacBook, tambien con AVANZADO abierto)
@@ -238,6 +239,10 @@ private:
     void setMode (int mode);
     void updateModeView();
     void showScaleMenu();
+    void launchCallout (std::unique_ptr<juce::Component> panel, juce::Component& from);
+    void closeCallout();
+    std::unique_ptr<juce::Component> calloutContent;   // (antes que callout: se borra despues)
+    std::unique_ptr<juce::CallOutBox> callout;
     void updateUndoButtons();
     void doUndo (bool redo);
 
@@ -294,6 +299,7 @@ public:
     void resized() override;
 
     void selectBand (int b) { view.selectBand (b); }
+    int getSelectedBandForTests() const { return view.getSelectedBand(); }
     void setAdvanced (bool open) { view.setAdvanced (open); }
     gaux::Mascot& getMascot() { return view.getMascot(); }
     void setUiScale (float s);

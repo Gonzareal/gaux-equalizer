@@ -54,6 +54,7 @@ New-Item -ItemType Directory -Path $portable | Out-Null
 Copy-Item -LiteralPath $vst3 -Destination $portable -Recurse
 Copy-Item -LiteralPath 'packaging\ANTES DE INSTALAR - Windows.txt' -Destination $dist
 Copy-Item -LiteralPath 'packaging\LICENCIA.txt' -Destination $dist
+Copy-Item -LiteralPath 'packaging\Guia de Gaux Equalizer.pdf' -Destination $dist
 try { Invoke-WebRequest -UseBasicParsing -TimeoutSec 20 -Uri 'https://www.gnu.org/licenses/agpl-3.0.txt' -OutFile (Join-Path $dist 'AGPLv3.txt') } catch { }
 $src = Join-Path $dist 'GauxEQ_codigo_fuente.zip'
 $git = Get-Command git -ErrorAction SilentlyContinue
