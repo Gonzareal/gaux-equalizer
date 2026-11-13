@@ -270,6 +270,7 @@ void GauxEqProcessor::prepareEngines (int qualityIndex)
     for (auto& ch : rangeStates) for (auto& st : ch) st.reset();
     modeMix.setTime (fs / gaux::EqBand::kTickSize, 0.015);
     modeMix.snap (params.mode->load() > 0.5f ? 1.0 : 0.0);
+    modeMixPrev = modeMix.current;
     tickCounter = 0;
 
     if (oversamplers[qualityIndex] != nullptr)
@@ -303,15 +304,17 @@ void GauxEqProcessor::processChain (juce::dsp::AudioBlock<float>& block, int num
         {
             const bool wasVintageSilent = modeMix.current <= 0.0;
             const bool wasParamSilent = modeMix.current >= 1.0;
+            modeMixPrev = modeMix.current;
             modeMix.tick();
             // Al empezar un cambio de modo, limpiar la memoria del motor que entra
-            if (wasVintageSilent && modeMix.current > 0.0) vintage.reset();
-            if (wasParamSilent && modeMix.current < 1.0) for (auto& b : bands) b.reset();
+            // (el motor que entra arranca desde silencio con un fundido de su entrada: sin clic de arranque)
+            if (wasVintageSilent && modeMix.current > 0.0) vintage.resetForFadeIn();
+            if (wasParamSilent && modeMix.current < 1.0) for (auto& b : bands) b.resetForFadeIn();
 
             // Sidechain general: cuanto se aplana la curva en este instante
             const double dk = duck != nullptr ? (double) duck[juce::jmin (n - 1, i) / juce::jmax (1, osFactor)] : 0.0;
             numActiveBands = 0;
-            if (modeMix.current < 1.0)
+            if (modeMix.current < 1.0 || modeMixPrev < 1.0)
                 for (int b = 0; b < gaux::kNumBands; ++b)
                 {
                     auto& band = bands[(size_t) b];
@@ -320,36 +323,43 @@ void GauxEqProcessor::processChain (juce::dsp::AudioBlock<float>& block, int num
                     band.controlTick();
                     if (band.isActive()) activeBands[(size_t) numActiveBands++] = b;
                 }
-            if (modeMix.current > 0.0) { vintage.setDuck (dk); vintage.controlTick(); }
+            if (modeMix.current > 0.0 || modeMixPrev > 0.0) { vintage.setDuck (dk); vintage.controlTick(); }
         }
         const int seg = juce::jmin (n - i, T - tickCounter);
+        const int t0 = tickCounter;
         tickCounter = (tickCounter + seg) % T;
 
-        const double vMix = modeMix.current;
+        // mezcla Parametrico/Vintage: avanza muestra a muestra dentro del tic (sin escalones)
+        const double vMix = modeMix.current, vPrev = modeMixPrev;
+        const bool runV = vMix > 0.0 || vPrev > 0.0, runP = vMix < 1.0 || vPrev < 1.0;
         for (int j = 0; j < seg; ++j) { pl[j] = d0[i + j]; pr[j] = stereo ? (double) d1[i + j] : 0.0; }
-        if (vMix > 0.0)
+        if (runV)
         {
             for (int j = 0; j < seg; ++j) { vl[j] = pl[j]; vr[j] = pr[j]; }
             vintage.processSpan (vl, vr, seg, stereo);
         }
-        if (vMix < 1.0)
+        if (runP)
             for (int k = 0; k < numActiveBands; ++k)
                 bands[(size_t) activeBands[(size_t) k]].processSpan (pl, pr, seg, stereo, sc != nullptr ? sc + i : nullptr);
 
-        if (vMix <= 0.0)
+        if (! runV)
         {
             for (int j = 0; j < seg; ++j) d0[i + j] = (float) pl[j];
             if (stereo) for (int j = 0; j < seg; ++j) d1[i + j] = (float) pr[j];
         }
-        else if (vMix >= 1.0)
+        else if (! runP)
         {
             for (int j = 0; j < seg; ++j) d0[i + j] = (float) vl[j];
             if (stereo) for (int j = 0; j < seg; ++j) d1[i + j] = (float) vr[j];
         }
         else
         {
-            for (int j = 0; j < seg; ++j) d0[i + j] = (float) (pl[j] + vMix * (vl[j] - pl[j]));
-            if (stereo) for (int j = 0; j < seg; ++j) d1[i + j] = (float) (pr[j] + vMix * (vr[j] - pr[j]));
+            for (int j = 0; j < seg; ++j)
+            {
+                const double m = vPrev + (vMix - vPrev) * (double) (t0 + j + 1) / (double) T;
+                d0[i + j] = (float) (pl[j] + m * (vl[j] - pl[j]));
+                if (stereo) d1[i + j] = (float) (pr[j] + m * (vr[j] - pr[j]));
+            }
         }
         i += seg;
     }
@@ -386,7 +396,7 @@ void GauxEqProcessor::splitProcessRange (juce::dsp::AudioBlock<float>& blk, int 
     const double hiT = juce::jlimit (loT * 1.05, 20000.0, (double) params.rangeHi->load());
     // Los bordes de la zona se deslizan (~25 ms) en vez de saltar: sin transitorios al moverlos o automatizarlos
     if (zoneLoLog < 0.0 || zoneFs != fs) { zoneLoLog = std::log (loT); zoneHiLog = std::log (hiT); zoneFs = fs; }
-    const double sc = std::exp (-16.0 / (fs * 0.025));
+    const double sc = std::exp (-4.0 / (fs * 0.025));   // (se actualiza cada 4 muestras: el borde se desliza sin escalones)
     gaux::SvfCoeffs lpLo, hpLo, lpHi, hpHi, apHi;
     bool useLo = false, useHi = false;
     auto design = [&]
@@ -405,7 +415,7 @@ void GauxEqProcessor::splitProcessRange (juce::dsp::AudioBlock<float>& blk, int 
 
     for (int i = 0; i < n; ++i)
     {
-        if ((i & 15) == 0)
+        if ((i & 3) == 0)
         {
             const double tl = std::log (loT), th = std::log (hiT);
             if (std::abs (zoneLoLog - tl) > 1.0e-4 || std::abs (zoneHiLog - th) > 1.0e-4)
@@ -1041,6 +1051,17 @@ void GauxEqProcessor::setStateInformation (const void* data, int sizeInBytes)
     if (auto xml = getXmlFromBinary (data, sizeInBytes))
         if (xml->hasTagName (apvts.state.getType()))
         {
+            // Sesion danada (o editada a mano): un valor que no es un numero o esta fuera de rango se cambia por
+            // el valor por defecto / el limite del control. Sin esto un NaN guardado dejaria la banda muda.
+            for (auto* e : xml->getChildWithTagNameIterator ("PARAM"))
+                if (auto* rp = dynamic_cast<juce::RangedAudioParameter*> (apvts.getParameter (e->getStringAttribute ("id"))))
+                {
+                    const auto& range = rp->getNormalisableRange();
+                    const double v = e->getDoubleAttribute ("value", (double) rp->convertFrom0to1 (rp->getDefaultValue()));
+                    const double safe = std::isfinite (v) ? juce::jlimit ((double) range.start, (double) range.end, v)
+                                                          : (double) rp->convertFrom0to1 (rp->getDefaultValue());
+                    if (safe != v || ! e->hasAttribute ("value")) e->setAttribute ("value", safe);
+                }
             apvts.replaceState (juce::ValueTree::fromXml (*xml));
             clashSource.setUserName (apvts.state.getProperty ("clashName").toString());   // nombre de la pista puesto a mano
             history.reset();
@@ -1109,7 +1130,7 @@ bool GauxEqProcessor::curveFromText (const juce::String& text)
     {
         auto tokens = juce::StringArray::fromTokens (lines[i], " ", "");
         if (tokens.isEmpty() || ! tokens[0].startsWith ("banda=")) continue;
-        const int b = tokens[0].fromFirstOccurrenceOf ("=", false, false).getIntValue() - 1;
+        const int b = (int) juce::jlimit ((juce::int64) -1, (juce::int64) gaux::kNumBands, tokens[0].fromFirstOccurrenceOf ("=", false, false).getLargeIntValue() - 1);
         if (b < 0 || b >= gaux::kNumBands) continue;
         for (int t = 1; t < tokens.size(); ++t)
         {

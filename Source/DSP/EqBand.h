@@ -438,7 +438,9 @@ public:
     {
         fs = sampleRate;
         const double tickRate = fs / kTickSize;
-        structFade.setTime (fs / kTickSize, 0.004);
+        structFade.setTime (fs / kTickSize, 0.008);
+        outStep = 0.0;
+        xfOldStep = 1.0 / (fs * 0.02);   // cambio de tipo o pendiente: 20 ms de fundido entre la curva vieja y la nueva
         satXfadeStepType = 1.0 / (fs * 0.03);   // fundido de 30 ms entre modos de saturacion
         mixSmoothCoeff = 1.0 - std::exp (-1.0 / (fs * 0.004));
         structFade.snap (1.0);
@@ -450,10 +452,23 @@ public:
         for (auto* sm : { &logFreq, &logQ })
             sm->setTime (tickRate, 0.012);
         avgCoeff = 1.0 - std::exp (-1.0 / (tickRate * 2.0));
+        dynOffCoeff = std::exp (-1.0 / (tickRate * 0.03));
         for (int ch = 0; ch < kMaxChannels; ++ch)
             dc[(size_t) ch].prepare (fs);
         reset();
         firstUpdate = true;
+        // (despues de preparar, una banda apagada vuelve a leer sus ajustes una vez: asi, si despues se enciende,
+        //  entra con su fundido normal en vez de aparecer de golpe)
+        sleeping = false;
+    }
+
+    // Limpia la memoria y hace que la banda vuelva a entrar con un fundido corto (al volver del Vintage)
+    void resetForFadeIn()
+    {
+        reset();
+        structFade.snap (1.0);
+        outGain = onAmount.current; outStep = 0.0;
+        startInputRamp (0.012);
     }
 
     void reset()
@@ -466,6 +481,7 @@ public:
         for (auto& sc : satChan) sc.reset();
         for (auto& sc : satChanOld) sc.reset();
         satXfade = 0.0;
+        xfOld = 1.0; xfR = 1.0;
         snapCoeffs = true;
         for (auto& st : detStates) st.reset();
         for (auto& d : dc) d.reset();
@@ -485,6 +501,7 @@ public:
             mix.snap (s.mix);
             mixNow = s.mix;
             onAmount.snap (s.on ? 1.0 : 0.0);
+            outGain = onAmount.current * structFade.current; outStep = 0.0;
             firstUpdate = false;
             dirty = true;
         }
@@ -541,7 +558,7 @@ public:
         }
 
         // Banda quieta (lo normal la mayor parte del tiempo): no hay nada que recalcular
-        if (! interpolating && ! regionInterp && ! dirty && ! pendingStruct && ! (target.dynOn && ! target.spectral) && duck == duckApplied
+        if (! interpolating && ! regionInterp && ! dirty && ! pendingStruct && ! (target.dynOn && ! target.spectral) && duck == duckApplied && dynGainDb == 0.0
             && ! logFreq.isMoving() && ! gain.isMoving() && ! logQ.isMoving() && ! driveDb.isMoving()
             && ! mix.isMoving() && ! onAmount.isMoving() && ! structFade.isMoving())
             return;
@@ -551,9 +568,36 @@ public:
         interpolating = false;
         if (regionInterp) { regionCur = regionTgt; regionInterp = false; }
 
+        // La banda se enciende (o sale del bypass) desde apagada del todo: sus filtros arrancan sin memoria. En vez de
+        // mezclar la salida de un filtro "vacio" (eso hace un clic), la banda entra con la senal: su entrada sube en
+        // 30 ms desde cero y la salida es siempre continua.
+        if (onAmount.target > 0.5 && onAmount.current <= 1.0e-4)
+        {
+            reset();
+            onAmount.snap (1.0);
+            outGain = structFade.current; outStep = 0.0;
+            startInputRamp (0.03);
+            dirty = true;
+        }
+
         const bool moving = logFreq.isMoving() || gain.isMoving() || logQ.isMoving()
                          || driveDb.isMoving() || mix.isMoving() || onAmount.isMoving();
         logFreq.tick(); gain.tick(); logQ.tick(); driveDb.tick(); mix.tick(); onAmount.tick();
+
+        // Cambio de tipo o de pendiente con la banda sonando: la curva vieja y la nueva suenan juntas y se funden en
+        // 20 ms (como en los EQ de referencia). No pasa por la senal sin EQ: un low cut o un band pass no "dejan
+        // escapar" un golpe de graves o de toda la mezcla. (El cambio de canal L/R/M/S sigue con el fundido de abajo.)
+        if (pendingStruct && pending.stereo == applied.stereo && xfOld >= 1.0 && outGain > 1.0e-4 && structFade.current >= 1.0)
+        {
+            oldNum = numSections; oldSvf = svfCur; oldStates = states;
+            applied.type = pending.type; applied.slope = pending.slope;
+            target.type = applied.type; target.slope = applied.slope;
+            driveDb.target = typeCanSaturate (target.type) ? target.driveDb : 0.0;
+            pendingStruct = false;
+            for (auto& chStates : states) for (auto& st : chStates) st.reset();
+            snapCoeffs = true; dirty = true;
+            xfOld = 0.0; xfR = 0.0;
+        }
 
         // Cambio de estructura con fundido: bajar, cambiar en silencio, subir
         structFade.target = pendingStruct ? 0.0 : 1.0;
@@ -565,9 +609,15 @@ public:
             driveDb.target = typeCanSaturate (target.type) ? target.driveDb : 0.0;
             pendingStruct = false;
             reset();
-            structFade.snap (0.0);
+            // la salida ya es la senal sin procesar: la estructura nueva entra con su entrada subiendo desde cero
+            structFade.snap (1.0);
+            outGain = onAmount.current; outStep = 0.0;
+            startInputRamp (0.012);
             dirty = true;
         }
+
+        // Mezcla de salida (encendido / cambio de estructura): avanza muestra a muestra dentro del tic (sin escalones)
+        outStep = (onAmount.current * structFade.current - outGain) / (double) kTickSize;
 
         // EQ dinamica: la ganancia se mueve segun cuanto supera el umbral la senal de la banda
         double newDyn = 0.0;
@@ -582,7 +632,15 @@ public:
             const double amount = std::clamp (over / 12.0, 0.0, 1.0);   // rodilla de 12 dB
             newDyn = target.rangeDb * amount;
         }
-        const bool dynChanged = std::abs (newDyn - dynGainDb) > 0.005 || std::abs (duck - duckApplied) > 1.0e-4;
+        else if (dynGainDb != 0.0)
+        {
+            // Se apaga la dinamica (o pasa a espectral) mientras estaba actuando: la ganancia vuelve a la fija en
+            // unos 30 ms, en vez de saltar (sin clic)
+            newDyn = std::abs (dynGainDb) < 0.01 ? 0.0 : dynGainDb * dynOffCoeff;
+        }
+        // (se compara con la ganancia que tiene el filtro ahora, no con la del tic anterior: con un release lento cada
+        //  tic cambia muy poco, pero el filtro igual tiene que seguir a la dinamica)
+        const bool dynChanged = std::abs (newDyn - dynDesigned) > 0.005 || std::abs (duck - duckApplied) > 1.0e-4;
         dynGainDb = newDyn;
         duckApplied = duck;
 
@@ -592,6 +650,7 @@ public:
         current = target;
         current.freq = std::exp (logFreq.current);
         current.gainDb = gain.current * (1.0 - duckApplied) + dynGainDb;
+        dynDesigned = dynGainDb;
         current.q = std::exp (logQ.current);
         current.driveDb = driveDb.current;
         current.mix = mix.current;
@@ -670,8 +729,15 @@ public:
             for (int i = 0; i < numSections; ++i) svfAdd (svfCur[(size_t) i], svfInc[(size_t) i]);
         if (regionInterp) svfAdd (regionCur, regionInc);
         if (satXfade > 0.0) satXfade = std::max (0.0, satXfade - satXfadeStep);   // avanza una vez por muestra
+        if (inRamp < 1.0) inRamp = std::min (1.0, inRamp + inRampStep);
+        if (xfOld < 1.0) { xfOld = std::min (1.0, xfOld + xfOldStep); xfR = xfOld * xfOld * (3.0 - 2.0 * xfOld); }
+        if (outStep != 0.0)
+        {
+            outGain += outStep;
+            if ((outStep > 0.0 && outGain >= outGoal()) || (outStep < 0.0 && outGain <= outGoal())) { outGain = outGoal(); outStep = 0.0; }
+        }
         mixNow += (current.mix - mixNow) * mixSmoothCoeff;                       // MIX suave muestra a muestra
-        const double amt = onAmount.current;
+        const double amt = outGain;
         if (amt <= 1.0e-4) return;
 
         // Detector con sidechain externo: escucha la zona de la banda en la senal externa
@@ -715,7 +781,8 @@ public:
         // Camino rapido (el caso de casi todas las bandas, casi todo el tiempo): banda quieta, sin saturacion ni
         // dinamica. Cada seccion procesa el tramo entero con su estado en registros y L/R intercalados.
         const bool fast = ! interpolating && ! regionInterp && ! satRegionOn && ! satEnabled && satXfade <= 0.0
-                       && ! isDynamic() && onAmount.current >= 1.0 && structFade.current >= 1.0;
+                       && ! isDynamic() && onAmount.current >= 1.0 && structFade.current >= 1.0 && inRamp >= 1.0 && outGain >= 1.0
+                       && xfOld >= 1.0;
         if (fast)
         {
             mixNow = current.mix;
@@ -799,9 +866,21 @@ private:
 
     inline double processChannel (int ch, double x, double amt)
     {
-        double y = x;
+        // Al entrar (encendido, bypass, tipo/pendiente/canal nuevo) los filtros reciben la senal con un fundido
+        // (arrancan desde silencio, sin el clic de un filtro con memoria vacia); al salir se funde la salida (los
+        // filtros siguen sonando con su cola natural). Quieta es exactamente la banda normal.
+        const double gIn = inRamp >= 1.0 ? 1.0 : inRamp * inRamp * (3.0 - 2.0 * inRamp);
+        const double xin = gIn >= 1.0 ? x : gIn * x;
+        double y = xfOld < 1.0 ? xfR * xin : xin;   // (curva nueva entrando: su entrada sube desde cero)
         for (int i = 0; i < numSections; ++i)
             y = states[(size_t) ch][(size_t) i].process (y, svfCur[(size_t) i]);
+        if (xfOld < 1.0)
+        {
+            // la curva vieja sigue sonando (con su cola natural) y se va
+            double yo = xin;
+            for (int i = 0; i < oldNum; ++i) yo = oldStates[(size_t) ch][(size_t) i].process (yo, oldSvf[(size_t) i]);
+            y += (1.0 - xfR) * yo;
+        }
 
         double region = 0.0;
         if (satRegionOn) region = regionStates[(size_t) ch].process (y, regionCur);   // siempre al dia (SVF suave)
@@ -819,8 +898,11 @@ private:
             y += mixNow * delta;
             satAcc += mixNow * mixNow * delta * delta;   // cuanta saturacion real hay (para la calavera)
         }
-        return x + amt * structFade.current * (y - x);
+        if (gIn < 1.0) y += (1.0 - gIn) * x;
+        return x + amt * (y - x);
     }
+
+    void startInputRamp (double seconds) { inRamp = 0.0; inRampStep = 1.0 / std::max (1.0, fs * seconds); }
 
     double fs = 44100.0;
     BandSettings target, current;
@@ -833,7 +915,7 @@ private:
     double env = 0.0, dynGainDb = 0.0, attackCoeff = 0.99, releaseCoeff = 0.999;
     double duck = 0.0, duckApplied = 0.0;
     double lastAtkMs = -1.0, lastRelMs = -1.0, lastCoeffFs = -1.0;
-    double avgDb = -40.0, avgCoeff = 0.001, effThrDb = -24.0;
+    double avgDb = -40.0, avgCoeff = 0.001, effThrDb = -24.0, dynOffCoeff = 0.99, dynDesigned = 0.0;
 
     std::array<BiquadCoeffs, kMaxSections> coeffs {};
     int numSections = 1;
@@ -850,6 +932,13 @@ private:
     std::array<SatChannelState, kMaxChannels> satChanOld {};
     double satXfade = 0.0, satXfadeStep = 0.001, satXfadeStepType = 0.001, lastDrive = 0.0;
     double mixNow = 1.0, mixSmoothCoeff = 0.01;
+    double inRamp = 1.0, inRampStep = 0.001;   // fundido de la entrada de los filtros (al entrar la banda)
+    double outGain = 1.0, outStep = 0.0;       // mezcla de salida de la banda (encendido x estructura), muestra a muestra
+    double outGoal() const { return onAmount.current * structFade.current; }
+    double xfOld = 1.0, xfR = 1.0, xfOldStep = 0.001;   // fundido curva vieja -> nueva (tipo o pendiente)
+    int oldNum = 0;
+    std::array<SvfCoeffs, kMaxSections> oldSvf {};
+    std::array<std::array<SvfState, kMaxSections>, kMaxChannels> oldStates {};
     bool satRegionOn = false;
     int lastSatType = -1;
 public:

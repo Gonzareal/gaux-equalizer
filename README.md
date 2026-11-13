@@ -1,6 +1,17 @@
-# Gaux Equalizer v0.22
+# Gaux Equalizer v0.23
 
 EQ para producción de música electrónica, desde la mezcla de cada instrumento hasta el mastering. Dos caras:
+
+## Novedades v0.23 (segunda auditoría: cero clics y blindaje)
+- **Cambios sin clics, medidos sobre un grave puro** (la prueba más exigente: un tono de 110 Hz, donde cualquier clic se ve). Todos los cambios en vivo quedan por debajo de -70 dBFS de "basura" alrededor del cambio (la mayoría por debajo de -100):
+  - Encender una banda **después de cambiar la calidad (HQ), la fase o volver del Vintage** ya no la hace aparecer de golpe (antes: clic de -41 dBFS).
+  - **Cambiar el tipo o la pendiente** de una banda funde la curva vieja con la nueva en 20 ms, como los EQ de referencia. Antes la banda pasaba unos ms por la señal sin EQ: un low cut o un band pass dejaban escapar un golpe de graves o de toda la mezcla.
+  - Bypass de una banda, encender/apagar, PARAMETRIC ↔ VINTAGE, LOW BOOST y GLOW del Vintage, OUTPUT de golpe y los bordes de la ZONE: las mezclas avanzan muestra a muestra y los filtros arrancan "calientes" (sin el clic de un filtro con la memoria vacía).
+  - Apagar la dinámica (o pasarla a SPECTRAL) mientras está actuando: la ganancia vuelve suave en 30 ms en vez de saltar.
+- **EQ dinámica con release lento**: el filtro ahora sigue siempre a la ganancia que muestra la pantalla (con releases de 1-2 s podía quedarse quieto hasta que pasaba otra cosa).
+- **Sesiones dañadas**: un valor roto guardado en la sesión (NaN, infinito, fuera de rango) se repara al abrir en vez de dejar una banda muda. Lo mismo con presets dañados.
+- **Cola informada al DAW** (retraso de fase lineal/natural + resonancia): Logic, Cubase y Reaper ya no pueden cortar los últimos ms al exportar con fase lineal.
+- **84 pruebas nuevas de blindaje**: pistas MONO en todos los modos (suena idéntico a estéreo con L = R), sidechain mono, bloques de 1, 2, 3, 17 y 8192 muestras, frecuencias de muestreo de 8 kHz a 384 kHz, preparar dos veces = mismo resultado, 400 estados guardados rotos, curvas pegadas con texto basura y 40 cambios en vivo medidos sobre un grave puro.
 
 ## Novedades v0.22 (auditoría completa)
 - **Guía de usuario en PDF** dentro de cada paquete (Mac y Windows): qué hace cada botón, flujos de trabajo, recetas, atajos y preguntas frecuentes, con capturas reales.

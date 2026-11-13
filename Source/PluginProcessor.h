@@ -59,7 +59,14 @@ public:
     bool acceptsMidi() const override { return false; }
     bool producesMidi() const override { return false; }
     bool isMidiEffect() const override { return false; }
-    double getTailLengthSeconds() const override { return 0.0; }
+    // Cola: cuanto sigue saliendo audio despues de que termina la entrada (el retraso de la fase lineal/natural y
+    // la resonancia de un filtro de Q alta en graves). Logic, Cubase y Reaper la usan para no cortar el final al
+    // exportar o al apagar una pista sin regiones; con 0 podian cortar los ultimos ms con fase lineal.
+    double getTailLengthSeconds() const override
+    {
+        const double fs = currentSampleRate.load();
+        return (fs > 0.0 ? getLatencySamples() / fs : 0.0) + 0.5;
+    }
 
     int getNumPrograms() override { return 1; }
     int getCurrentProgram() override { return 0; }
@@ -169,12 +176,27 @@ private:
     bool wantsSpectral() const;
     void applyLatency();
     gaux::Smoother modeMix;   // 0 = parametrico, 1 = vintage
+    double modeMixPrev = 0.0; // (valor del tic anterior: la mezcla se interpola muestra a muestra)
     int tickCounter = 0;
     std::array<int, gaux::kNumBands> activeBands {};   // bandas encendidas (se arma en cada tic)
     int numActiveBands = 0;
 
-    juce::SmoothedValue<float, juce::ValueSmoothingTypes::Multiplicative> outputGain;
-    juce::SmoothedValue<float> bypassMix, autoGainSmooth;
+    // Valor suavizado muestra a muestra en dos etapas: arranca y frena suave (sin las "esquinas" de una rampa
+    // recta, que sobre un grave puro se oyen como un clic chiquito). logDomain: en dB (para ganancias).
+    struct SmoothValue2
+    {
+        gaux::Smoother s; bool logDomain = false; float rawTarget = 0.0f;
+        void reset (double fs, double seconds) { s.setTime (fs, seconds); s.snap (s.target); }
+        void setCurrentAndTargetValue (float v) { rawTarget = v; s.snap (enc (v)); }
+        void setTargetValue (float v) { if (v != rawTarget) { rawTarget = v; s.target = enc (v); } }
+        bool isSmoothing() const { return s.isMoving(); }
+        float getTargetValue() const { return rawTarget; }
+        float getNextValue() { s.tick(); return s.isMoving() ? dec (s.current) : rawTarget; }
+        double enc (float v) const { return logDomain ? std::log (std::max (1.0e-9f, v)) : (double) v; }
+        float dec (double v) const { return logDomain ? (float) std::exp (v) : (float) v; }
+    };
+    SmoothValue2 outputGain { {}, true }, bypassMix;
+    juce::SmoothedValue<float> autoGainSmooth;
     juce::AudioBuffer<float> dryBuffer;
     juce::AudioBuffer<float> dryDelay;          // senal original retrasada (bypass alineado con la latencia)
     int dryDelayMask = 0, dryDelayWrite = 0, dryBlockStart = 0;

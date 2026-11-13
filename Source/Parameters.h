@@ -105,7 +105,7 @@ inline float parseFreq (const juce::String& t)
         const auto rest = s.substring (pos).trim();
         if (rest.containsOnly ("-0123456789") && rest.isNotEmpty())
         {
-            const int octave = rest.getIntValue();
+            const int octave = juce::jlimit (-2, 12, rest.length() > 3 ? 99 : rest.getIntValue());   // (texto absurdo: sin desbordes)
             const int midi = (octave + 1) * 12 + k;
             return (float) (440.0 * std::pow (2.0, (midi - 69) / 12.0));
         }

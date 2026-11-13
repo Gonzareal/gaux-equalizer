@@ -416,7 +416,7 @@ private:
 
     void setReal (const juce::String& id, float v)
     {
-        if (auto* p = apvts.getParameter (id))
+        if (auto* p = apvts.getParameter (id); p != nullptr && std::isfinite (v))   // (preset danado: se ignora el valor)
         {
             p->beginChangeGesture();
             p->setValueNotifyingHost (p->convertTo0to1 (v));

@@ -4304,6 +4304,374 @@ static int goldenMain (bool write, const juce::File& dir)
     return fails == 0 ? 0 : 1;
 }
 
+//==============================================================================
+// BLINDAJE (v0.23): casos de DAW raros y de uso que todavia no se probaban
+// - mono (1 entrada / 1 salida) en todos los modos, sidechain mono
+// - bloques diminutos preparados (1, 2, 3, 17 muestras) y frecuencias de muestreo extremas (8 k a 384 k)
+// - volver a preparar = mismo resultado (sin memoria vieja), estados guardados rotos o con basura
+// - encender bandas despues de cambiar la calidad/fase (fundido de entrada), otros cambios en vivo
+static St renderLayout (double fs, const St& in, int block, bool monoLayout, const std::function<void (GauxEqProcessor&)>& setup,
+                        const std::function<void (GauxEqProcessor&, double t)>& automate = {}, int* latOut = nullptr, int* resets = nullptr,
+                        GauxEqProcessor* reuse = nullptr)
+{
+    std::unique_ptr<GauxEqProcessor> own;
+    if (reuse == nullptr) { own = std::make_unique<GauxEqProcessor>(); reuse = own.get(); }
+    auto& p = *reuse;
+    if (monoLayout)
+    {
+        juce::AudioProcessor::BusesLayout lay;
+        lay.inputBuses.add (juce::AudioChannelSet::mono()); lay.outputBuses.add (juce::AudioChannelSet::mono());
+        lay.inputBuses.add (juce::AudioChannelSet::disabled());
+        if (! p.setBusesLayout (lay)) { report ("el plugin acepta mono", false); return St (in.size()); }
+    }
+    if (setup) setup (p);
+    p.prepareToPlay (fs, block);
+    const int nch = monoLayout ? 1 : 2;
+    juce::AudioBuffer<float> buf (nch, block); juce::MidiBuffer midi;
+    St out (in.size());
+    for (size_t off = 0; off < in.size(); off += (size_t) block)
+    {
+        const int n = (int) std::min<size_t> ((size_t) block, in.size() - off);
+        if (automate) automate (p, off / fs);
+        buf.setSize (nch, n, false, false, true);
+        for (int i = 0; i < n; ++i) { buf.setSample (0, i, (float) in.l[off + i]); if (nch > 1) buf.setSample (1, i, (float) in.r[off + i]); }
+        p.processBlock (buf, midi);
+        for (int i = 0; i < n; ++i) { out.l[off + i] = buf.getSample (0, i); out.r[off + i] = buf.getSample (nch - 1, i); }
+    }
+    if (latOut) *latOut = p.getLatencySamples();
+    if (resets) *resets = p.dspResets.load();
+    return out;
+}
+
+static bool allFinite (const St& s) { for (size_t i = 0; i < s.size(); ++i) if (! std::isfinite (s.l[i]) || ! std::isfinite (s.r[i])) return false; return true; }
+
+static St noiseMusic (double fs, double secs, unsigned seed, bool sameLR)
+{
+    St s ((size_t) (fs * secs)); Rng rr (seed); double lp = 0, lp2 = 0;
+    for (size_t i = 0; i < s.size(); ++i)
+    {
+        const double t = i / fs, ph = std::fmod (t, 0.5);
+        const double kickv = ph < 0.15 ? 0.6 * std::sin (2 * kPi * (48 + 110 * std::exp (-ph * 28)) * ph) * std::exp (-ph * 9) : 0.0;
+        const double w = rr.uni(); lp += 0.2 * (w - lp); lp2 += 0.05 * (rr.uni() - lp2);
+        const double v = kickv + 0.12 * lp + 0.05 * w + 0.1 * std::sin (2 * kPi * 330 * t);
+        s.l[i] = v; s.r[i] = sameLR ? v : 0.8 * v + 0.2 * lp2;
+    }
+    return s;
+}
+
+// Clic sobre un tono grave puro (110 Hz): lo que aparece arriba de 1.5 kHz alrededor del cambio (en dBFS). Un tono de 110 Hz y
+// cualquier EQ lineal sobre el no tienen nada ahi; un clic o un "pop" si. Con saturacion los armonicos siempre estan: cuenta
+// solo lo que pasa por encima de lo que hay antes y despues del cambio. -70 dBFS no se oye ni con auriculares.
+static double clickHfDb (const std::vector<double>& y, size_t ev, double fs)
+{
+    Bq h1 (makeHighPass (fs, 1500, 0.5412)), h2 (makeHighPass (fs, 1500, 1.3066)), h3 (makeHighPass (fs, 1500, 0.5412)), h4 (makeHighPass (fs, 1500, 1.3066));
+    std::vector<double> hp (y.size());
+    for (size_t i = 0; i < y.size(); ++i) hp[i] = h4.p (h3.p (h2.p (h1.p (y[i]))));
+    auto pk = [&] (double a, double b) { double m = 0; for (size_t i = (size_t) ((double) ev + a * fs); i < (size_t) ((double) ev + b * fs) && i < hp.size(); ++i) m = std::max (m, std::abs (hp[i])); return m; };
+    const double event = pk (-0.01, 0.25), steady = std::max (pk (-0.4, -0.05), pk (0.6, 1.0));
+    return event <= steady * 1.41 ? -300.0 : dB (event);   // (nada por encima de lo normal: sin clic)
+}
+
+static void hardeningTests()
+{
+    if (gFilter.isNotEmpty() && ! juce::String ("blindaje hardening").contains (gFilter)) return;
+    std::cout << "\n== BLINDAJE (v0.23): DAWs raros, mono, bloques diminutos, estados rotos ==" << std::endl;
+    using namespace ParamID;
+    const double fs = 48000;
+
+    // Ajustes "de todo un poco" para cada modo
+    struct Cfg { const char* name; std::function<void (GauxEqProcessor&)> set; };
+    auto busy = [] (GauxEqProcessor& p)
+    {
+        applyBand (p, 0, lcut (35, 3)); applyBand (p, 1, bell (120, 3, 1.2)); applyBand (p, 2, bell (450, -4, 2.5));
+        applyBand (p, 3, sat (bell (1200, 2, 1), 1, 9, 70)); applyBand (p, 4, dynb (bell (3000, 0, 1), -32, -6, 5, 90));
+        applyBand (p, 5, hshelf (9000, 2.5)); applyBand (p, 6, notch (2600, 8)); applyBand (p, 7, hcut (18000, 6));
+        applyBand (p, 8, tilt (900, 1)); applyBand (p, 9, bell (700, 2, 1, 4));   // (Side)
+    };
+    const std::vector<Cfg> cfgs {
+        { "MIN", [&] (auto& p) { busy (p); } },
+        { "MIN HQ 4x", [&] (auto& p) { busy (p); setP (p, quality, 2); } },
+        { "NAT", [&] (auto& p) { busy (p); setP (p, phase, 3); } },
+        { "NAT HQ 2x", [&] (auto& p) { busy (p); setP (p, phase, 3); setP (p, quality, 1); } },
+        { "LIN", [&] (auto& p) { busy (p); setP (p, phase, 1); } },
+        { "LIN HQ", [&] (auto& p) { busy (p); setP (p, phase, 2); } },
+        { "ESPECTRAL", [&] (auto& p) { busy (p); applyBand (p, 10, spectral (dynb (bell (4000, 0, 0.8), -30, -6))); } },
+        { "ZONE", [&] (auto& p) { busy (p); setP (p, rangeOn, 1); setP (p, rangeLo, 100); setP (p, rangeHi, 6000); } },
+        { "VINTAGE", [&] (auto& p) { setP (p, mode, 1); setP (p, vLowBoost, 5); setP (p, vHighBoost, 4); setP (p, vTube, 40); setP (p, vIron, 50); setP (p, vAirGain, 3); } },
+        { "SOLO", [&] (auto& p) { busy (p); p.soloBand = 2; } },
+        { "AUTO GAIN + SC sin senal", [&] (auto& p) { busy (p); setP (p, autoGain, 1); setP (p, scOn, 1); } },
+    };
+
+    // 1) MONO (pista mono en el DAW): todo funciona y suena igual que en estereo con L = R
+    {
+        const St in = noiseMusic (fs, 3.0, 11, true);
+        for (auto& c : cfgs)
+        {
+            int resM = 0, resS = 0;
+            // (en una pista mono todas las bandas actuan sobre el unico canal, como en Pro-Q: la banda en Side se
+            //  compara con la misma banda en Stereo)
+            auto set = [&] (GauxEqProcessor& p) { c.set (p); setP (p, band (9, "stereo"), 0); };
+            const St ym = renderLayout (fs, in, 512, true, set, {}, nullptr, &resM);
+            const St ys = renderLayout (fs, in, 512, false, set, {}, nullptr, &resS);
+            double e = 0, ref = 0;
+            for (size_t i = (size_t) (0.5 * fs); i < in.size(); ++i) { e = std::max (e, std::abs (ym.l[i] - ys.l[i])); ref = std::max (ref, std::abs (ys.l[i])); }
+            const double d = dB (e) - dB (ref);
+            report (juce::String ("Pista MONO, ") + c.name + ": finito, sin reinicios, igual a estereo con L = R (" + juce::String (d, 1) + " dB)",
+                    allFinite (ym) && resM == 0 && resS == 0 && d < -60.0);
+        }
+    }
+
+    // 2) Bloques preparados diminutos (1, 2, 3 y 17 muestras) y gigantes, en todos los modos: mismo sonido que con 512
+    {
+        const St in = noiseMusic (fs, 1.5, 12, false);
+        for (auto& c : cfgs)
+        {
+            int latRef = 0; const St ref = renderLayout (fs, in, 512, false, c.set, {}, &latRef);
+            double worst = -300; bool fin = true, latOk = true;
+            for (int bs : { 1, 2, 3, 17, 8192 })
+            {
+                int lat = 0, res = 0;
+                const St y = renderLayout (fs, in, bs, false, c.set, {}, &lat, &res);
+                fin = fin && allFinite (y) && res == 0;
+                latOk = latOk && lat == latRef;
+                double e = 0, mx = 0;
+                for (size_t i = (size_t) (0.6 * fs); i < in.size(); ++i) { e = std::max ({ e, std::abs (y.l[i] - ref.l[i]), std::abs (y.r[i] - ref.r[i]) }); mx = std::max (mx, std::abs (ref.l[i])); }
+                worst = std::max (worst, dB (e) - dB (mx));
+            }
+            // (la dinamica y el SC se recalculan por bloque: con bloques de 1 muestra hay diferencias minimas)
+            report (juce::String ("Bloques de 1, 2, 3, 17 y 8192 muestras, ") + c.name + ": finito, misma latencia, diferencia con 512 = " + juce::String (worst, 1) + " dB",
+                    fin && latOk && worst < -40.0);
+        }
+    }
+
+    // 3) Frecuencias de muestreo extremas (8 kHz telefono a 384 kHz): bandas por encima de Nyquist, todo finito y
+    //    con todo apagado sale exacto
+    for (double sr : { 8000.0, 11025.0, 22050.0, 32000.0, 176400.0, 352800.0, 384000.0 })
+    {
+        const St in = noiseMusic (sr, 1.0, 13, false);
+        bool fin = true; int res = 0;
+        for (auto& c : cfgs)
+        {
+            int r = 0;
+            const St y = renderLayout (sr, in, 256, false, [&] (GauxEqProcessor& p) { c.set (p); applyBand (p, 11, bell (19000, 6, 2)); applyBand (p, 12, hcut (20000, 8)); applyBand (p, 13, lcut (20, 8)); }, {}, nullptr, &r);
+            fin = fin && allFinite (y) && y.peak() < 30.0; res += r;
+        }
+        int lat = 0;
+        const St flat = renderLayout (sr, in, 256, false, {}, {}, &lat);
+        double e = 0; for (size_t i = 0; i < in.size(); ++i) e = std::max (e, std::abs (flat.l[i] - in.l[i]));
+        report ("A " + juce::String (sr / 1000.0, 2) + " kHz: todos los modos finitos (con bandas en 19-20 kHz, arriba de Nyquist), sin reinicios; todo apagado = bit-exacto ("
+                + juce::String (dB (e), 0) + " dB)", fin && res == 0 && lat == 0 && e < 1e-7);
+    }
+
+    // 4) El DAW vuelve a preparar el plugin (mismo formato): el resultado es identico al de la primera vez
+    {
+        const St in = noiseMusic (fs, 2.0, 14, false);
+        for (auto& c : cfgs)
+        {
+            GauxEqProcessor p;
+            const St a = renderLayout (fs, in, 512, false, c.set, {}, nullptr, nullptr, &p);
+            const St b = renderLayout (fs, in, 512, false, {}, {}, nullptr, nullptr, &p);   // (mismo procesador, preparado de nuevo)
+            double e = 0; for (size_t i = 0; i < in.size(); ++i) e = std::max ({ e, std::abs (a.l[i] - b.l[i]), std::abs (a.r[i] - b.r[i]) });
+            report (juce::String ("Preparar de nuevo, ") + c.name + ": sale identico (" + juce::String (dB (e), 0) + " dB de diferencia)", e < 1e-6);
+        }
+    }
+
+    // 5) Sidechain mono (algunos DAW lo conectan asi) y sidechain que aparece/desaparece
+    {
+        GauxEqProcessor p;
+        juce::AudioProcessor::BusesLayout lay;
+        lay.inputBuses.add (juce::AudioChannelSet::stereo()); lay.outputBuses.add (juce::AudioChannelSet::stereo()); lay.inputBuses.add (juce::AudioChannelSet::mono());
+        const bool ok = p.setBusesLayout (lay);
+        applyBand (p, 0, dynb (bell (100, 0, 1), -30, -9, 1, 60, true)); setP (p, scOn, 1); setP (p, scThr, -30); setP (p, scDuck, 80);
+        applyBand (p, 1, spectral (dynb (bell (3000, 0, 1), -30, -6, 5, 90, true)));
+        p.prepareToPlay (fs, 512);
+        juce::AudioBuffer<float> buf (3, 512); juce::MidiBuffer midi; Rng rr (15);
+        bool fin = true; double pk = 0;
+        for (int blk = 0; blk < 400; ++blk)
+        {
+            for (int i = 0; i < 512; ++i)
+            {
+                const double t = (blk * 512 + i) / fs;
+                buf.setSample (0, i, (float) (0.3 * std::sin (2 * kPi * 100 * t))); buf.setSample (1, i, (float) (0.3 * std::sin (2 * kPi * 100 * t)));
+                buf.setSample (2, i, (blk / 50) % 2 ? (float) (0.5 * rr.uni()) : 0.0f);
+            }
+            p.processBlock (buf, midi);
+            for (int i = 0; i < 512; ++i) { fin = fin && std::isfinite (buf.getSample (0, i)); pk = std::max (pk, (double) std::abs (buf.getSample (0, i))); }
+        }
+        report ("Sidechain MONO + dinamica + espectral + SC general: el plugin lo acepta, finito y sin reinicios", ok && fin && pk < 1.0 && p.dspResets.load() == 0);
+    }
+
+    // 6) Estados guardados rotos (sesion danada, copia a medias, otro plugin): nunca se cuelga y queda usable
+    {
+        GauxEqProcessor good; busy (good);
+        juce::MemoryBlock mb; good.getStateInformation (mb);
+        std::mt19937 rg (16);
+        int crashes = 0; bool usable = true;
+        for (int k = 0; k < 400; ++k)
+        {
+            juce::MemoryBlock bad (mb);
+            const int kind = k % 5;
+            if (kind == 0) bad.setSize ((size_t) (rg() % std::max<size_t> (1, mb.getSize())));                        // cortado
+            else if (kind == 1) for (int j = 0; j < 20; ++j) static_cast<char*> (bad.getData())[rg() % bad.getSize()] = (char) (rg() % 256);   // bits danados
+            else if (kind == 2) { bad.setSize (1 + rg() % 3000); for (size_t j = 0; j < bad.getSize(); ++j) static_cast<char*> (bad.getData())[j] = (char) (rg() % 256); }   // basura
+            else if (kind == 3)
+            {
+                // XML valido con valores absurdos
+                auto xml = juce::AudioProcessor::getXmlFromBinary (mb.getData(), (int) mb.getSize());
+                for (auto* e : xml->getChildIterator())
+                {
+                    const double vals[] = { 1e30, -1e30, std::numeric_limits<double>::quiet_NaN(), std::numeric_limits<double>::infinity(), -5, 99999 };
+                    if (rg() % 3 == 0) e->setAttribute ("value", vals[rg() % 6]);
+                }
+                xml->setAttribute ("clashName", juce::String::repeatedString ("x", (int) (rg() % 5000)));
+                bad.reset(); juce::AudioProcessor::copyXmlToBinary (*xml, bad);
+            }
+            else { juce::XmlElement other ("OTRO_PLUGIN"); other.setAttribute ("a", 1); bad.reset(); juce::AudioProcessor::copyXmlToBinary (other, bad); }
+            GauxEqProcessor p;
+            p.setStateInformation (bad.getData(), (int) bad.getSize());
+            for (auto* prm : p.getParameters())
+            {
+                const float v = prm->getValue();
+                if (! std::isfinite (v) || v < 0.0f || v > 1.0f) usable = false;
+            }
+            p.prepareToPlay (fs, 256);
+            juce::AudioBuffer<float> buf (2, 256); juce::MidiBuffer midi; Rng rr ((unsigned) k);
+            for (int blk = 0; blk < 40; ++blk)
+            {
+                for (int i = 0; i < 256; ++i) { const float v = (float) (0.2 * rr.uni()); buf.setSample (0, i, v); buf.setSample (1, i, v); }
+                p.processBlock (buf, midi);
+                for (int i = 0; i < 256; ++i) if (! std::isfinite (buf.getSample (0, i))) usable = false;
+            }
+            if (p.dspResets.load() > 0) ++crashes;
+            if (! usable || p.dspResets.load() > 0) { std::cout << "    (estado roto tipo " << kind << ", caso " << k << ": " << (usable ? "reinicio interno" : "valor invalido") << ")" << std::endl; break; }
+        }
+        report ("400 estados guardados rotos (cortados, con bits danados, basura, valores absurdos/NaN, de otro plugin): nunca se cuelga, parametros validos, audio finito",
+                usable && crashes == 0);
+    }
+
+    // 7) Pegar curvas con texto roto (portapapeles con cualquier cosa)
+    {
+        GauxEqProcessor p; busy (p);
+        const juce::String texts[] = { "", "hola", "GAUX-CURVA 1", "GAUX-CURVA 1\nbanda=0 freq=100", "GAUX-CURVA 1\nbanda=99 freq=100", "GAUX-CURVA 1\nbanda=3 freq=nan gain=inf q=-4 type=77 slope=-3",
+                                       "GAUX-CURVA 1\nbanda=3 freq=1e40 gain=-1e40 = ==== q", "GAUX-CURVA 1\nbanda=-2147483648 x", "GAUX-CURVA 9\n" + juce::String::repeatedString ("banda=1 gain=3\n", 2000) };
+        bool ok = true;
+        for (auto& t : texts) p.curveFromText (t);
+        for (auto* prm : p.getParameters()) { const float v = prm->getValue(); ok = ok && std::isfinite (v) && v >= 0.0f && v <= 1.0f; }
+        p.prepareToPlay (fs, 256);
+        juce::AudioBuffer<float> buf (2, 256); juce::MidiBuffer midi; Rng rr (17);
+        for (int blk = 0; blk < 100; ++blk)
+        {
+            for (int i = 0; i < 256; ++i) { const float v = (float) (0.2 * rr.uni()); buf.setSample (0, i, v); buf.setSample (1, i, v); }
+            p.processBlock (buf, midi);
+            for (int i = 0; i < 256; ++i) ok = ok && std::isfinite (buf.getSample (0, i));
+        }
+        report ("Pegar curvas con texto roto (vacio, NaN, infinitos, bandas inexistentes, 2000 lineas): no se cuelga y queda todo valido", ok && p.dspResets.load() == 0);
+    }
+
+    // 7b) EQ dinamica con release lento (2 s): el filtro sigue en todo momento a la ganancia que muestra la pantalla
+    {
+        GauxEqProcessor p;
+        applyBand (p, 0, dynb (bell (1000, 0, 1), -30, -6, 10, 2000));
+        p.prepareToPlay (fs, 480);
+        juce::AudioBuffer<float> buf (2, 480); juce::MidiBuffer midi;
+        double worst = 0; int n = 0;
+        for (int blk = 0; blk < 400; ++blk)
+        {
+            const double a = blk < 100 ? 0.5 : 0.05;
+            double inE = 0, outE = 0;
+            for (int i = 0; i < 480; ++i) { const float v = (float) (a * std::sin (2 * kPi * 1000.0 * (blk * 480 + i) / fs)); buf.setSample (0, i, v); buf.setSample (1, i, v); inE += (double) v * v; }
+            p.processBlock (buf, midi);
+            for (int i = 0; i < 480; ++i) outE += (double) buf.getSample (0, i) * buf.getSample (0, i);
+            const double meas = 10.0 * std::log10 (outE / inE), shown = p.dynGainDb[0].load();
+            if (blk > 120) { worst = std::max (worst, std::abs (meas - shown)); ++n; }
+        }
+        report ("EQ dinamica con release de 2 s: lo que suena sigue a la ganancia de la pantalla todo el tiempo (desvio max " + juce::String (worst, 3) + " dB)", worst < 0.15);
+    }
+
+    // 8) Cambios en vivo que faltaban: encender bandas despues de cambiar calidad o fase (deben entrar con fundido),
+    //    solo de banda, saturacion, Q y frecuencia de golpe, pendiente del band pass, all pass, mix, SC general
+    {
+        St tone ((size_t) (fs * 3.0));
+        for (size_t i = 0; i < tone.size(); ++i)
+        {
+            const double t = i / fs;
+            const double v = 0.35 * std::sin (2 * kPi * 220 * t) + 0.12 * std::sin (2 * kPi * 3100 * t) + 0.06 * std::sin (2 * kPi * 9000 * t);
+            tone.l[i] = v; tone.r[i] = 0.8 * v + 0.05 * std::sin (2 * kPi * 450 * t);
+        }
+        const size_t ev = (size_t) (1.5 * fs);
+        auto base = [] (GauxEqProcessor& p) { applyBand (p, 0, bell (220, 6, 1)); applyBand (p, 1, hshelf (6000, 4)); applyBand (p, 2, lcut (40, 2)); };
+        struct Ev { const char* name; std::function<void (GauxEqProcessor&)> setup, change; std::function<void (GauxEqProcessor&, double)> earlier; };
+        const Ev evs[] = {
+            { "Encender banda +9 dB despues de pasar a HQ 2x", [&] (auto& p) { base (p); applyBand (p, 5, bell (220, 9, 1)); setP (p, band (5, "on"), 0); },
+              [] (auto& p) { setP (p, band (5, "on"), 1); }, [] (auto& p, double t) { if (t > 0.3 && t < 0.32) setP (p, quality, 1); } },
+            { "Encender banda +9 dB despues de pasar a fase NAT", [&] (auto& p) { base (p); applyBand (p, 5, bell (220, 9, 1)); setP (p, band (5, "on"), 0); },
+              [] (auto& p) { setP (p, band (5, "on"), 1); }, [] (auto& p, double t) { if (t > 0.3 && t < 0.32) setP (p, phase, 3); } },
+            { "Encender banda +9 dB despues de ir y volver del Vintage", [&] (auto& p) { base (p); applyBand (p, 5, bell (220, 9, 1)); setP (p, band (5, "on"), 0); },
+              [] (auto& p) { setP (p, band (5, "on"), 1); }, [] (auto& p, double t) { if (t > 0.3 && t < 0.32) setP (p, mode, 1); if (t > 0.8 && t < 0.82) setP (p, mode, 0); } },
+            { "Banda nueva (low cut 36) despues de HQ 4x", [&] (auto& p) { base (p); },
+              [] (auto& p) { applyBand (p, 6, lcut (300, 2)); }, [] (auto& p, double t) { if (t > 0.3 && t < 0.32) setP (p, quality, 2); } },
+            { "Bypass de una banda (tecla 0)", [&] (auto& p) { base (p); }, [] (auto& p) { setP (p, band (0, "byp"), 1); }, {} },
+            { "Solo de banda ON", [&] (auto& p) { base (p); }, [] (auto& p) { p.soloBand = 0; }, {} },
+            { "Q 0.5 -> 8 de golpe", [&] (auto& p) { base (p); setP (p, band (0, "q"), 0.5f); }, [] (auto& p) { setP (p, band (0, "q"), 8); }, {} },
+            { "Frecuencia 220 Hz -> 4 kHz de golpe", [&] (auto& p) { base (p); }, [] (auto& p) { setP (p, band (0, "freq"), 4000); }, {} },
+            { "Ganancia +6 -> -18 dB de golpe", [&] (auto& p) { base (p); }, [] (auto& p) { setP (p, band (0, "gain"), -18); }, {} },
+            { "Saturacion TUBE -> TAPE con drive alto", [&] (auto& p) { base (p); setP (p, band (0, "drive"), 18); }, [] (auto& p) { setP (p, band (0, "satType"), 1); }, {} },
+            { "Mix de saturacion 100 -> 0 %", [&] (auto& p) { base (p); setP (p, band (0, "drive"), 18); }, [] (auto& p) { setP (p, band (0, "mix"), 0); }, {} },
+            { "Band pass 12 -> 48 dB", [&] (auto& p) { base (p); applyBand (p, 3, bpass (1000, 0.7, 0)); }, [] (auto& p) { setP (p, band (3, "slope"), 3); }, {} },
+            { "Tipo Bell -> All Pass", [&] (auto& p) { base (p); }, [] (auto& p) { setP (p, band (0, "type"), 8); }, {} },
+            { "Canal Stereo -> Left", [&] (auto& p) { base (p); }, [] (auto& p) { setP (p, band (1, "stereo"), 1); }, {} },
+            { "SC general ON (sin sidechain)", [&] (auto& p) { base (p); }, [] (auto& p) { setP (p, scOn, 1); }, {} },
+            { "Fase MIN -> NAT", [&] (auto& p) { base (p); }, [] (auto& p) { setP (p, phase, 3); }, {} },
+            { "ZONE: borde 150 -> 2000 Hz de golpe", [&] (auto& p) { base (p); setP (p, rangeOn, 1); setP (p, rangeLo, 150); setP (p, rangeHi, 8000); }, [] (auto& p) { setP (p, rangeLo, 2000); }, {} },
+            { "Vintage: LOW BOOST 0 -> 10 de golpe", [&] (auto& p) { setP (p, mode, 1); setP (p, vLowFreq, 3); }, [] (auto& p) { setP (p, vLowBoost, 10); }, {} },
+            { "Vintage: HIGH FREQ selector 5k -> 16k", [&] (auto& p) { setP (p, mode, 1); setP (p, vHighBoost, 6); setP (p, vHighFreq, 1); }, [] (auto& p) { setP (p, vHighFreq, 6); }, {} },
+            // (los de la prueba EN VIVO de siempre, ahora tambien medidos sobre el tono grave puro)
+            { "Bypass general ON", [&] (auto& p) { base (p); }, [] (auto& p) { setP (p, bypass, 1); }, {} },
+            { "Bypass general ON en HQ 4x", [&] (auto& p) { base (p); setP (p, quality, 2); }, [] (auto& p) { setP (p, bypass, 1); }, {} },
+            { "Encender una banda +6 dB", [&] (auto& p) { base (p); setP (p, band (0, "on"), 0); }, [] (auto& p) { setP (p, band (0, "on"), 1); }, {} },
+            { "Cambiar tipo Bell -> High Shelf", [&] (auto& p) { base (p); }, [] (auto& p) { setP (p, band (0, "type"), 2); }, {} },
+            { "Low cut 40 Hz 24 -> 48 dB", [&] (auto& p) { base (p); }, [] (auto& p) { setP (p, band (2, "slope"), 3); }, {} },
+            { "Low cut 150 Hz 12 -> 96 dB (sobre el tono)", [&] (auto& p) { applyBand (p, 2, lcut (150, 0)); }, [] (auto& p) { setP (p, band (2, "slope"), 7); }, {} },
+            { "Canal Stereo -> Side", [&] (auto& p) { base (p); }, [] (auto& p) { setP (p, band (1, "stereo"), 4); }, {} },
+            { "Output -12 -> +6 dB", [&] (auto& p) { base (p); setP (p, output, -12); }, [] (auto& p) { setP (p, output, 6); }, {} },
+            { "Gain Scale 100 -> 200 %", [&] (auto& p) { base (p); }, [] (auto& p) { setP (p, gainScale, 200); }, {} },
+            { "Auto Gain ON", [&] (auto& p) { base (p); }, [] (auto& p) { setP (p, autoGain, 1); }, {} },
+            { "Parametrico -> Vintage", [&] (auto& p) { base (p); setP (p, vLowBoost, 5); setP (p, vLmBoost, 3); }, [] (auto& p) { setP (p, mode, 1); }, {} },
+            { "Vintage -> Parametrico", [&] (auto& p) { base (p); setP (p, vLowBoost, 5); setP (p, mode, 1); }, [] (auto& p) { setP (p, mode, 0); }, {} },
+            { "Vintage: PROGRAM IN off", [&] (auto& p) { setP (p, mode, 1); setP (p, vLowBoost, 5); setP (p, vHighBoost, 4); }, [] (auto& p) { setP (p, vProgramIn, 0); }, {} },
+            { "Vintage: GLOW 0 -> 60 %", [&] (auto& p) { setP (p, mode, 1); setP (p, vLowBoost, 5); }, [] (auto& p) { setP (p, vTube, 60); }, {} },
+            { "ZONE ON", [&] (auto& p) { base (p); setP (p, rangeLo, 150); setP (p, rangeHi, 5000); }, [] (auto& p) { setP (p, rangeOn, 1); }, {} },
+            { "Saturacion: drive 0 -> 18 (TUBE)", [&] (auto& p) { base (p); }, [] (auto& p) { setP (p, band (0, "drive"), 18); }, {} },
+            { "Dinamica ON (actua al instante)", [&] (auto& p) { base (p); setP (p, band (1, "thr"), -50); setP (p, band (1, "range"), -9); setP (p, band (1, "atk"), 1); }, [] (auto& p) { setP (p, band (1, "dyn"), 1); }, {} },
+            { "Calidad Normal -> HQ 4x", [&] (auto& p) { base (p); }, [] (auto& p) { setP (p, quality, 2); }, {} },
+            { "Calidad HQ 4x -> Normal", [&] (auto& p) { base (p); setP (p, quality, 2); }, [] (auto& p) { setP (p, quality, 0); }, {} },
+            { "Fase MIN -> LIN", [&] (auto& p) { base (p); }, [] (auto& p) { setP (p, phase, 1); }, {} },
+            { "Espectral ON", [&] (auto& p) { base (p); applyBand (p, 4, dynb (bell (110, 0, 1), -40, -6)); }, [] (auto& p) { setP (p, band (4, "spec"), 1); }, {} },
+        };
+        // (dos senales: la mezcla de 3 tonos y un tono grave puro, donde hasta el clic mas chico se veria)
+        St pure ((size_t) (fs * 3.0));
+        for (size_t i = 0; i < pure.size(); ++i) pure.l[i] = pure.r[i] = 0.3 * std::sin (2 * kPi * 110 * i / fs);
+        for (auto& e : evs)
+        {
+            double c = -100, hf = -300;
+            for (const St* sig : { &tone, &pure })
+            {
+                bool done = false;
+                const St y = renderLayout (fs, *sig, 256, false, e.setup, [&] (GauxEqProcessor& p, double t)
+                {
+                    if (e.earlier) e.earlier (p, t);
+                    juce::MessageManager::getInstance()->runDispatchLoopUntil (1);   // (el temporizador arma los motores de fase natural)
+                    if (! done && t * fs >= (double) ev) { e.change (p); done = true; }
+                });
+                if (sig == &tone) c = std::max ({ c, clickDb (y.l, ev, fs), clickDb (y.r, ev, fs) });
+                else hf = std::max (hf, clickHfDb (y.l, ev, fs));
+            }
+            report (juce::String ("Cambio en vivo: ") + e.name + ": transitorio " + juce::String (c, 1) + " dB sobre lo normal; clic sobre un tono grave puro "
+                    + juce::String (hf, 1) + " dBFS", c < 6.0 && hf < -70.0);
+        }
+    }
+}
+
 int main (int argc, char** argv)
 {
     juce::ScopedJuceInitialiser_GUI init;
@@ -4369,6 +4737,7 @@ int main (int argc, char** argv)
     stressTests();
     bypassSoloTests();
     auditTests();
+    hardeningTests();
     std::cout << "\nRESUMEN: " << gChecks << " comprobaciones, " << gFails << " fallas, " << gWarn << " avisos" << std::endl;
     return gFails == 0 ? 0 : 1;
 }

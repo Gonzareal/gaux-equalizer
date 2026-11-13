@@ -117,9 +117,10 @@ inline int designVintage (const VintageSettings& v, double fs, BiquadCoeffs* out
     // Acople por transformador del equipo original: cuando se realzan graves no deja pasar DC ni subsonicos
     // (pasa altos de 1er orden hasta 3.5 Hz: -0.13 dB en 20 Hz). Asi el realce nunca amplifica un DC de la senal.
     // Con LOW BOOST en 0 desaparece del todo (el Vintage en cero sigue siendo 100 % transparente).
-    out[10] = BiquadCoeffs {};
-    if (const double fc = 3.5 * std::clamp (v.lowBoost / 2.0, 0.0, 1.0); fc > 0.01)
+    // (siempre es el mismo filtro, con la frecuencia bajando a 0.001 Hz cuando LOW BOOST esta en 0: asi entra y sale
+    //  sin saltos. En 0 el procesador lo trata como plano y no lo calcula: el Vintage en cero sigue siendo exacto)
     {
+        const double fc = std::max (0.001, 3.5 * std::clamp (v.lowBoost / 2.0, 0.0, 1.0));
         const double K = std::tan (kPi * fc / fs);
         BiquadCoeffs t; t.b0 = 1.0 / (1.0 + K); t.b1 = -t.b0; t.b2 = 0.0; t.a1 = (K - 1.0) / (K + 1.0); t.a2 = 0.0;
         out[10] = t;
@@ -184,7 +185,9 @@ public:
         for (auto& d : dc) d.prepare (fs);
         for (auto& d : dcIron) d.prepare (fs);
         xfadeStep = 1.0 / (fs * 0.035);   // 35 ms (avanza muestra a muestra)
+        fadeInStep = 1.0 / (fs * 0.008);  // 8 ms
         ironCoeff = 1.0 - std::exp (-2.0 * kPi * 180.0 / fs);
+        amtCoeff = 1.0 - std::exp (-1.0 / (fs * 0.004));
         reset();
         firstUpdate = true;
     }
@@ -195,10 +198,15 @@ public:
             for (auto& st : chStates) st.reset();
         xfade = 0.0; pendingXfade = false; snapCoeffs = true;
         for (auto& t : tubeState) t.reset();
+        glowXf = 0.0;
         for (auto& d : dc) d.reset();
         for (auto& d : dcIron) d.reset();
         ironLp.fill (0.0);
     }
+
+    // Limpia la memoria y la entrada sube en 8 ms (al pasar del Parametrico al Vintage): los filtros arrancan
+    // desde silencio sin el clic de arranque de una memoria vacia
+    void resetForFadeIn() { reset(); fadeIn = 0.0; }
 
     void setTarget (const VintageSettings& v)
     {
@@ -215,6 +223,7 @@ public:
             || v.attenFreq != target.attenFreq || v.airFreq != target.airFreq
             || v.lmFreq != target.lmFreq || v.dipFreq != target.dipFreq || v.hmFreq != target.hmFreq
             || v.lowCut != target.lowCut || v.highCut != target.highCut || v.filterIn != target.filterIn;
+        if (firstUpdate) { glowAmt = 0.3 * std::min (1.0, e.tube / 25.0); ironAmt = 0.6 * std::min (1.0, e.iron / 20.0); }
         if (firstUpdate || selectorChanged) dirty = true;
         if (selectorChanged && ! firstUpdate) pendingXfade = true;   // los selectores cambian con fundido, sin clics
         firstUpdate = false;
@@ -267,6 +276,7 @@ public:
             // seccion plana: numerador == denominador (la perilla en 0, filtro apagado)
             flat[(size_t) i] = std::abs (c.b0 - 1.0) < 1.0e-12 && std::abs (c.b1 - c.a1) < 1.0e-12 && std::abs (c.b2 - c.a2) < 1.0e-12;
         }
+        flat[kTransformerSection] = current.lowBoost <= 0.0;   // acople del transformador sin LOW BOOST: plano (ver designVintage)
         if (snapCoeffs) { svfCur = svf; snapCoeffs = false; }
         else
         {
@@ -278,7 +288,18 @@ public:
         // Tube: hasta +18 dB de drive en la etapa de valvula
         tubeDrive = std::pow (10.0, (current.tube / 100.0) * 18.0 / 20.0);
         // Etapa de valvula de salida: el mismo motor TUBE de las bandas (2do armonico, nivel compensado, ADAA)
-        tubeSat.setup (fs, SatType::Tube, (current.tube / 100.0) * 15.0);
+        {
+            // GLOW moviendose: la curva de valvula nueva se funde con la anterior a lo largo del tic (sin "zipper")
+            const double newDrive = (current.tube / 100.0) * 15.0;
+            if (newDrive != glowDrive && current.tube > 0.05 && glowDrive >= 0.0)
+            {
+                glowOld = tubeSat; tubeStateOld = tubeState; glowXf = 1.0;
+            }
+            glowDrive = newDrive;
+            tubeSat.setup (fs, SatType::Tube, newDrive);
+        }
+        if (current.tube <= 0.05) glowAmt = 0.3 * std::min (1.0, current.tube / 25.0);   // (apagada: lista para volver sin saltos)
+        if (current.iron <= 0.05) ironAmt = 0.6 * std::min (1.0, current.iron / 20.0);
     }
 
     inline double processSample (int ch, double x)
@@ -288,7 +309,11 @@ public:
         double y = x;
         if (current.iron > 0.05) y = ironStep (ch, y);
         for (int i = 0; i < kVintageSections; ++i)
-            y = states[(size_t) ch][(size_t) i].process (y, svfCur[(size_t) i]);
+        {
+            auto& st = states[(size_t) ch][(size_t) i];
+            if (flat[(size_t) i]) { svfTrack (st, y, svfCur[(size_t) i]); continue; }   // plana: solo su memoria sigue la senal
+            y = st.process (y, svfCur[(size_t) i]);
+        }
         if (xfade > 0.0)
         {
             if (ch == 0) xfade = std::max (0.0, xfade - xfadeStep);   // el canal 0 marca el paso del tiempo
@@ -308,6 +333,18 @@ public:
     // tramo entero con su estado en registros y L/R intercalados; las secciones planas no se calculan.
     inline void processSpan (double* l, double* r, int n, bool stereo)
     {
+        glowStereo = stereo;
+        if (fadeIn < 1.0)
+        {
+            for (int j = 0; j < n; ++j)
+            {
+                fadeIn = std::min (1.0, fadeIn + fadeInStep);
+                const double g = fadeIn * fadeIn * (3.0 - 2.0 * fadeIn);
+                l[j] = processSample (0, g * l[j]) + (1.0 - g) * l[j];
+                if (stereo) r[j] = processSample (1, g * r[j]) + (1.0 - g) * r[j];
+            }
+            return;
+        }
         if (interpolating || xfade > 0.0)
         {
             for (int j = 0; j < n; ++j) { l[j] = processSample (0, l[j]); if (stereo) r[j] = processSample (1, r[j]); }
@@ -317,11 +354,18 @@ public:
             for (int j = 0; j < n; ++j) { l[j] = ironStep (0, l[j]); if (stereo) r[j] = ironStep (1, r[j]); }
         for (int i = 0; i < kVintageSections; ++i)
         {
-            if (flat[(size_t) i]) { states[0][(size_t) i].reset(); states[1][(size_t) i].reset(); continue; }
             const SvfCoeffs c = svfCur[(size_t) i];
             auto& sl = states[0][(size_t) i];
             auto& sr = states[1][(size_t) i];
             double a1 = sl.ic1, a2 = sl.ic2, b1 = sr.ic1, b2 = sr.ic2;
+            if (flat[(size_t) i])
+            {
+                // Perilla en 0: la seccion no cambia el sonido (no se calcula su salida), pero su memoria sigue la
+                // senal. Asi, al girar la perilla, el filtro ya esta "caliente" y entra sin ningun clic.
+                for (int j = 0; j < n; ++j) svfTrack (sl, l[j], c);
+                if (stereo) for (int j = 0; j < n; ++j) svfTrack (sr, r[j], c);
+                continue;
+            }
             if (stereo)
                 for (int j = 0; j < n; ++j)
                 {
@@ -362,7 +406,9 @@ private:
         double& lp = ironLp[(size_t) ch];
         lp += ironCoeff * (y - lp);
         const double sat = saturateNormalised (lp + 0.08 * lp * lp, ironDrive, SatType::Tape);
-        const double amt = 0.6 * std::min (1.0, current.iron / 20.0);
+        // (la cantidad se desliza muestra a muestra: al girar la perilla no hay escalones)
+        if (ch == 0) ironAmt += (0.6 * std::min (1.0, current.iron / 20.0) - ironAmt) * amtCoeff;
+        const double amt = ironAmt;
         const double d = amt * dcIron[(size_t) ch].process (sat - lp);
         satAcc += d * d;
         return y + d;
@@ -372,16 +418,37 @@ private:
     // ~1 % de distorsion) y cada vez mas color cuanto mas fuerte entra (gain staging analogico)
     inline double glowStep (int ch, double y)
     {
-        const double amt = 0.3 * std::min (1.0, current.tube / 25.0);
-        const double d = amt * dc[(size_t) ch].process (tubeSat.process (tubeState[(size_t) ch], y));
+        if (ch == 0) glowAmt += (0.3 * std::min (1.0, current.tube / 25.0) - glowAmt) * amtCoeff;
+        const double amt = glowAmt;
+        double sv = tubeSat.process (tubeState[(size_t) ch], y);
+        if (glowXf > 0.0)
+        {
+            const double so = glowOld.process (tubeStateOld[(size_t) ch], y);
+            sv += glowXf * (so - sv);
+            if (ch == 1 || ! glowStereo) glowXf = std::max (0.0, glowXf - 1.0 / kTickSize);
+        }
+        const double d = amt * dc[(size_t) ch].process (sv);
         satAcc += d * d;
         return y + d;
     }
 
+    // Memoria de una seccion plana: avanza como el filtro, sin calcular la salida
+    static inline void svfTrack (SvfState& st, double x, const SvfCoeffs& c)
+    {
+        const double v3 = x - st.ic2, v1 = c.a1 * st.ic1 + c.a2 * v3, v2 = st.ic2 + c.a2 * st.ic1 + c.a3 * v3;
+        st.ic1 = 2.0 * v1 - st.ic1; st.ic2 = 2.0 * v2 - st.ic2;
+    }
+
+    static constexpr int kTransformerSection = 10;
     double satAcc = 0.0;
     std::array<bool, kVintageSections> flat {};   // secciones planas (no hacen nada): se saltean
     static constexpr int kNumSmoothed = 11;
     double fs = 44100.0, tubeDrive = 1.0, ironDrive = 1.0, ironCoeff = 0.02;
+    double glowAmt = 0.0, ironAmt = 0.0, amtCoeff = 0.01;
+    Saturator glowOld;
+    std::array<SatChannelState, kMaxChannels> tubeStateOld {};
+    double glowXf = 0.0, glowDrive = -1.0;
+    bool glowStereo = true;
     std::array<double, kMaxChannels> ironLp {};
     std::array<DcBlocker, kMaxChannels> dcIron {};
     Saturator tubeSat;
@@ -395,6 +462,7 @@ private:
     bool interpolating = false, snapCoeffs = true;
     std::array<std::array<SvfState, kVintageSections>, kMaxChannels> statesOld {};
     double xfade = 0.0, xfadeStep = 0.01;
+    double fadeIn = 1.0, fadeInStep = 0.01;
     bool pendingXfade = false;
     std::array<std::array<SvfState, kVintageSections>, kMaxChannels> states {};
     std::array<DcBlocker, kMaxChannels> dc {};
