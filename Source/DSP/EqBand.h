@@ -447,7 +447,7 @@ public:
         // Ganancia, drive, mix y encendido: 30 ms (sin "zipper" aunque la automatizacion llegue a saltos).
         // Frecuencia y Q: 12 ms, para que siga LFOs rapidos (filtros de acid/techno a 1/16) casi completos
         // (a 8 Hz recorre el 92 % del barrido) sin agregar ruido por los saltos de bloque.
-        for (auto* sm : { &gain, &driveDb, &mix, &onAmount })
+        for (auto* sm : { &gain, &driveDb, &mix, &onAmount, &thrSmooth, &rangeSmooth })
             sm->setTime (tickRate, 0.03);
         for (auto* sm : { &logFreq, &logQ })
             sm->setTime (tickRate, 0.012);
@@ -500,11 +500,15 @@ public:
             driveDb.snap (s.driveDb);
             mix.snap (s.mix);
             mixNow = s.mix;
+            thrSmooth.snap (s.thresholdDb);
+            rangeSmooth.snap (s.rangeDb);
             onAmount.snap (s.on ? 1.0 : 0.0);
             outGain = onAmount.current * structFade.current; outStep = 0.0;
             firstUpdate = false;
             dirty = true;
         }
+        // (dinamica apagada: threshold y range quedan listos, sin deslizarse al encenderla)
+        if (! s.dynOn || s.spectral) { thrSmooth.snap (s.thresholdDb); rangeSmooth.snap (s.rangeDb); }
         // Cambio de estructura (tipo, pendiente o canal): no se aplica de golpe. La banda se apaga en
         // unos ms, cambia con los filtros limpios y vuelve a entrar. Asi no hay saltos ni transitorios.
         const bool structural = s.type != applied.type || s.slope != applied.slope || s.stereo != applied.stereo;
@@ -627,10 +631,13 @@ public:
             const double envDb = 20.0 * std::log10 (std::max (env, 1.0e-9));
             // Promedio lento del nivel (unos 2 s) para el threshold automatico
             if (envDb > -90.0) avgDb += (envDb - avgDb) * avgCoeff;
-            effThrDb = target.autoThr ? avgDb + 3.0 : target.thresholdDb;
+            // (threshold y range se deslizan en 30 ms: una automatizacion por bloques del DAW no hace saltar la ganancia)
+            thrSmooth.target = target.thresholdDb; thrSmooth.tick();
+            rangeSmooth.target = target.rangeDb; rangeSmooth.tick();
+            effThrDb = target.autoThr ? avgDb + 3.0 : thrSmooth.current;
             const double over = envDb - effThrDb;
             const double amount = std::clamp (over / 12.0, 0.0, 1.0);   // rodilla de 12 dB
-            newDyn = target.rangeDb * amount;
+            newDyn = rangeSmooth.current * amount;
         }
         else if (dynGainDb != 0.0)
         {
@@ -906,7 +913,7 @@ private:
 
     double fs = 44100.0;
     BandSettings target, current;
-    Smoother logFreq, gain, logQ, driveDb, mix, onAmount, structFade;
+    Smoother logFreq, gain, logQ, driveDb, mix, onAmount, structFade, thrSmooth, rangeSmooth;
     BandSettings applied, pending;
     bool pendingStruct = false, firstApply = true;
     bool dirty = true, firstUpdate = true, satEnabled = false, sleeping = false;

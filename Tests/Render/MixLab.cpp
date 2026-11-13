@@ -4672,6 +4672,8 @@ static void hardeningTests()
     }
 }
 
+#include "LabTests.inc"
+
 int main (int argc, char** argv)
 {
     juce::ScopedJuceInitialiser_GUI init;
@@ -4738,6 +4740,7 @@ int main (int argc, char** argv)
     bypassSoloTests();
     auditTests();
     hardeningTests();
+    labTests();
     std::cout << "\nRESUMEN: " << gChecks << " comprobaciones, " << gFails << " fallas, " << gWarn << " avisos" << std::endl;
     return gFails == 0 ? 0 : 1;
 }

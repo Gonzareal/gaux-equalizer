@@ -1,6 +1,25 @@
-# Gaux Equalizer v0.23
+# Gaux Equalizer v0.24
 
 EQ para producción de música electrónica, desde la mezcla de cada instrumento hasta el mastering. Dos caras:
+
+## Novedades v0.24 (laboratorio: 194 mediciones de la industria)
+- **Validador oficial de Steinberg (VST3 SDK)**: 537 pruebas, todas pasan. Encontró que el programa del plugin no tenía nombre (Cubase muestra la lista de programas): ahora se llama "Default".
+- **Automatizar el THRESHOLD o el RANGE de una banda dinámica** ya no deja clics: antes cada bloque de automatización del DAW hacía saltar la ganancia (rastro de agudos a -63 dBFS sobre un grave); ahora se deslizan en 30 ms (-85 a -97 dBFS).
+- **Automatizar en fase LINEAL o NATURAL**: el fundido entre filtros ahora es en curva S. El rastro de agudos al automatizar bajó de -78 a -119 dBFS.
+- **Laboratorio nuevo (194 comprobaciones)**, las mediciones que hacen Plugin Doctor, el validador VST3 y los técnicos de hardware:
+  - linealidad a -60/-30/0/+12 dBFS y THD+N del EQ limpio (-134 a -150 dB) en los 6 modos;
+  - huella armónica de cada saturación (TUBE 2do armónico, TAPE/SOFT 3ro, HARD serie impar larga, FUZZ pares + impares), DRIVE, compensación de nivel, MIX y saturación solo dentro de la banda;
+  - nulos +g/-g (Bell, shelves, tilt) en MIN, NAT y LIN;
+  - texto ↔ valor de los 57 tipos de parámetro (lo que escribes en el DAW);
+  - 24 automatizaciones sin "cremallera";
+  - exportar (offline) = reproducir y dos copias idénticas;
+  - latencia exacta en 6 modos × 3 frecuencias;
+  - Vintage contra el hardware (cada posición de LOW/HIGH FREQ, ATTEN SEL, MEQ-5, filtros y el truco Pultec);
+  - M/S y L/R exactos;
+  - balística de la dinámica (threshold, range, attack, release);
+  - medidores de pico, RMS y true peak;
+  - misma curva de 44.1 a 192 kHz;
+  - DC, polaridad y colas que se apagan sin denormales.
 
 ## Novedades v0.23 (segunda auditoría: cero clics y blindaje)
 - **Cambios sin clics, medidos sobre un grave puro** (la prueba más exigente: un tono de 110 Hz, donde cualquier clic se ve). Todos los cambios en vivo quedan por debajo de -70 dBFS de "basura" alrededor del cambio (la mayoría por debajo de -100):

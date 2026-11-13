@@ -264,8 +264,11 @@ private:
                 for (int k = 0; k < B; ++k)
                 {
                     f = juce::jmin (1.0f, f + fadeStep);
-                    // fundido de igual potencia no hace falta: los dos filtros tienen la misma fase (lineal)
-                    outBuf[(size_t) out][(size_t) k] = tmpA[(size_t) k] + f * (tmpB[(size_t) k] - tmpA[(size_t) k]);
+                    // fundido de igual potencia no hace falta: los dos filtros tienen la misma fase (lineal).
+                    // Curva en S (arranca y termina suave): sin las "esquinas" de una rampa recta, que al automatizar
+                    // dejaban un rastro de agudos
+                    const float w = f * f * (3.0f - 2.0f * f);
+                    outBuf[(size_t) out][(size_t) k] = tmpA[(size_t) k] + w * (tmpB[(size_t) k] - tmpA[(size_t) k]);
                 }
                 if (out == 1) { fade = f; finished = f >= 1.0f; }
             }
