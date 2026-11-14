@@ -367,22 +367,58 @@ void GauxEqProcessor::processChain (juce::dsp::AudioBlock<float>& block, int num
 
 float GauxEqProcessor::estimateCurveLoudnessDb (bool vintageMode) const
 {
-    // Promedio de energia de la curva entre 40 Hz y 16 kHz (peso igual por octava)
+    // Cuanto cambia el volumen PERCIBIDO (LUFS) con la curva, sobre el espectro promedio de la musica (ruido rosa:
+    // igual energia por octava) y con la ponderacion K de los medidores de loudness (corte en 38 Hz y +4 dB
+    // arriba de 1.7 kHz). Asi AUTO GAIN deja el volumen igual en un medidor de LUFS, tambien con realces de agudos
+    // o cortes de graves (antes promediaba todas las octavas igual y se quedaba hasta 1.5 LU corto).
     const double fs = currentSampleRate.load();
-    constexpr int points = 32;
+    constexpr int points = 64;
     std::array<gaux::BandSettings, gaux::kNumBands> bs;
     for (int b = 0; b < gaux::kNumBands; ++b) bs[(size_t) b] = params.band (b);
     const auto v = params.vintage();
-    double sum = 0.0;
+    static const std::array<double, points> kw = []
+    {
+        std::array<double, points> w {};
+        gaux::BandSettings hp; hp.on = true; hp.type = (int) gaux::BandType::LowCut; hp.freq = 38.0f; hp.q = 0.5f; hp.slope = 0;
+        gaux::BandSettings sh; sh.on = true; sh.type = (int) gaux::BandType::HighShelf; sh.freq = 1681.0f; sh.gainDb = 4.0f; sh.q = 0.71f;
+        for (int i = 0; i < points; ++i)
+        {
+            const double f = 20.0 * std::pow (20000.0 / 20.0, i / (double) (points - 1));
+            const double m = gaux::analogMagnitudeOfBand (hp, f) * gaux::analogMagnitudeOfBand (sh, f);
+            w[(size_t) i] = m * m;
+        }
+        return w;
+    }();
+    // Estereo: en la musica el centro lleva la mayor parte de la energia (~80 %) y los lados el resto (~20 %).
+    // Una banda solo en Side cambia poco el volumen; una en L o R cambia la mitad de la energia.
+    constexpr double midShare = 0.8;
+    double sum = 0.0, wsum = 0.0;
     for (int i = 0; i < points; ++i)
     {
-        const double f = 40.0 * std::pow (16000.0 / 40.0, i / (double) (points - 1));
-        double m = 1.0;
-        if (vintageMode) m = gaux::magnitudeOfVintage (v, f, fs);
-        else for (auto& s : bs) m *= gaux::magnitudeOfBand (s, f, fs);
-        sum += m * m;
+        const double f = 20.0 * std::pow (20000.0 / 20.0, i / (double) (points - 1));
+        if (f >= 0.45 * fs) break;
+        double pw = 1.0;
+        if (vintageMode) { const double m = gaux::magnitudeOfVintage (v, f, fs); pw = m * m; }
+        else
+        {
+            double pm = 1.0, ps = 1.0;
+            for (auto& s : bs)
+            {
+                if (! s.on) continue;
+                const double m = gaux::magnitudeOfBand (s, f, fs), p2 = m * m;
+                switch (s.stereo)
+                {
+                    case 3:  pm *= p2; break;                                   // Mid
+                    case 4:  ps *= p2; break;                                   // Side
+                    case 1: case 2: pm *= 0.5 * (1.0 + p2); ps *= 0.5 * (1.0 + p2); break;   // L o R: la mitad
+                    default: pm *= p2; ps *= p2; break;                         // Stereo
+                }
+            }
+            pw = midShare * pm + (1.0 - midShare) * ps;
+        }
+        sum += kw[(size_t) i] * pw; wsum += kw[(size_t) i];
     }
-    return (float) (10.0 * std::log10 (std::max (1.0e-9, sum / points)));
+    return (float) (10.0 * std::log10 (std::max (1.0e-9, sum / std::max (1.0e-12, wsum))));
 }
 
 // Separa la senal en 3 partes con cruces Linkwitz-Riley (24 dB/oct): graves bajo "Low",

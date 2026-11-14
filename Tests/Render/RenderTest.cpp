@@ -506,6 +506,268 @@ static int run (const juce::String& outDir)
 }
 }
 
+
+//==============================================================================
+// VIDEO: graba la interfaz real cuadro a cuadro (30 fps) con musica de verdad pasando por el plugin
+namespace video
+{
+static int run (const juce::String& outDir, const juce::String& musicFile)
+{
+    using namespace gaux;
+    std::vector<float> music;
+    { juce::FileInputStream in ((juce::File (musicFile))); const auto n = in.getTotalLength() / 4; music.resize ((size_t) n); in.read (music.data(), (int) (n * 4)); }
+    size_t mpos = 0;
+    GauxEqProcessor p; p.prepareToPlay (48000.0, 400);
+    std::unique_ptr<juce::AudioProcessorEditor> ed (p.createEditor());
+    auto* e = dynamic_cast<GauxEqEditor*> (ed.get());
+    p.apvts.state.setProperty ("uiZoom", 1.0, nullptr);
+    e->setUiScale (MainView::kBaseScale);
+    auto* d = dynamic_cast<SpectrumDisplay*> (findById (ed.get(), "display"));
+    juce::AudioBuffer<float> buf (2, 400); juce::MidiBuffer midi;
+    auto feed = [&] (int samples)
+    {
+        for (int done = 0; done < samples; done += 400)
+        {
+            for (int i = 0; i < 400; ++i)
+            {
+                if (mpos + 1 >= music.size()) mpos = 0;
+                buf.setSample (0, i, music[mpos] * 0.4f); buf.setSample (1, i, music[mpos + 1] * 0.4f); mpos += 2;
+            }
+            p.processBlock (buf, midi);
+        }
+    };
+    auto band = [&] (int b, int type, float f, float g, float q, int slope = 1)
+    {
+        setP (p, ParamID::band (b, "type"), (float) type); setP (p, ParamID::band (b, "freq"), f); setP (p, ParamID::band (b, "gain"), g);
+        setP (p, ParamID::band (b, "q"), q); setP (p, ParamID::band (b, "slope"), (float) slope); setP (p, ParamID::band (b, "on"), 1);
+    };
+    auto clearAll = [&] { for (int b = 0; b < kNumBands; ++b) { setP (p, ParamID::band (b, "on"), 0); setP (p, ParamID::band (b, "drive"), 0); setP (p, ParamID::band (b, "dyn"), 0);
+                                                               setP (p, ParamID::band (b, "stereo"), 0); setP (p, ParamID::band (b, "byp"), 0); } };
+    auto tick = [&] (int n = 1) { for (int i = 0; i < n; ++i) { feed (1600); juce::MessageManager::getInstance()->runDispatchLoopUntil (2); pumpFrames (*ed); } };
+    juce::JPEGImageFormat jpg; jpg.setQuality (0.94f);
+    juce::String segDir; int frame = 0;
+    auto shoot = [&]
+    {
+        auto img = ed->createComponentSnapshot (ed->getLocalBounds(), true, 2.0f);
+        juce::File f (segDir + juce::String::formatted ("/f_%04d.jpg", frame++));
+        f.deleteFile(); juce::FileOutputStream os (f); jpg.writeImageToStream (img, os);
+    };
+    auto seg = [&] (const juce::String& name, double secs, const std::function<void (double, int)>& act)
+    {
+        segDir = outDir + "/" + name; juce::File (segDir).deleteRecursively(); juce::File (segDir).createDirectory(); frame = 0;
+        const int n = (int) std::lround (secs * 30.0);
+        for (int i = 0; i < n; ++i) { act (i / 30.0, i); tick(); shoot(); }
+        std::printf ("segmento %s: %d cuadros\n", name.toRawUTF8(), n); std::fflush (stdout);
+    };
+    auto ease = [] (double x) { x = juce::jlimit (0.0, 1.0, x); return x * x * (3 - 2 * x); };
+    auto clickText = [&] (const juce::String& t)
+    {
+        std::function<juce::Button* (juce::Component*)> find = [&] (juce::Component* c) -> juce::Button*
+        {
+            if (auto* b = dynamic_cast<juce::Button*> (c); b != nullptr && b->getButtonText() == t && b->isVisible()) return b;
+            for (auto* ch : c->getChildren()) if (auto* r = find (ch)) return r;
+            return nullptr;
+        };
+        if (auto* b = find (ed.get())) { b->triggerClick(); juce::MessageManager::getInstance()->runDispatchLoopUntil (60); return true; }
+        return false;
+    };
+    auto closeAll = [&] { if (auto* mm = juce::ModalComponentManager::getInstanceWithoutCreating()) mm->cancelAllModalComponents(); juce::MessageManager::getInstance()->runDispatchLoopUntil (60); };
+
+    clearAll(); tick (60);
+
+    // 1) Crear bandas: aparecen una por una (la curva se arma sola)
+    struct B { int type; float f, g, q; int slope; };
+    const B bands[] = { { 3, 30, 0, 0.707f, 1 }, { 0, 62, 4, 1.2f, 1 }, { 0, 320, -3.5f, 1.8f, 1 }, { 0, 2600, 2.5f, 1.0f, 1 }, { 2, 9500, 3.0f, 0.7f, 1 }, { 4, 19000, 0, 0.707f, 1 } };
+    seg ("01_bandas", 5.0, [&] (double t, int)
+    {
+        for (int b = 0; b < 6; ++b)
+        {
+            const double t0 = 0.3 + b * 0.7;
+            if (t >= t0)
+            {
+                if (p.params.band (b).on == false) { band (b, bands[b].type, bands[b].f, 0, bands[b].q, bands[b].slope); e->selectBand (b); }
+                setP (p, ParamID::band (b, "gain"), (float) (bands[b].g * ease ((t - t0) / 0.5)));
+            }
+        }
+    });
+    // 2) Arrastrar una banda con el mouse (frecuencia y ganancia) y la rueda para la Q
+    {
+        e->selectBand (3);
+        juce::Point<float> start = d->pointFor (2600, 2.5);
+        bool down = false;
+        seg ("02_arrastrar", 4.5, [&] (double t, int)
+        {
+            if (! down) { d->mouseMove (mouseAt (d, start, start)); d->mouseDown (mouseAt (d, start, start)); down = true; }
+            if (t < 3.2)
+            {
+                const double u = ease (t / 3.2);
+                const double f = 2600 * std::pow (1100.0 / 2600.0, std::sin (u * 3.14159) * 0.9) * std::pow (5200.0 / 2600.0, u * u);
+                const double g = 2.5 + 4.5 * std::sin (u * 3.14159 * 1.5);
+                d->mouseDrag (mouseAt (d, d->pointFor (f, g), start));
+            }
+            else
+            {
+                static bool up = false;
+                if (! up) { d->mouseUp (mouseAt (d, d->pointFor (p.params.band (3).freq, p.params.band (3).gainDb), start)); up = true; }
+                setP (p, ParamID::band (3, "q"), (float) (1.0 + 3.0 * ease ((t - 3.2) / 1.0)));
+            }
+        });
+        d->mouseExit (mouseAt (d, { 5, 5 }, { 5, 5 }));
+    }
+    // 3) Los 9 tipos de filtro sobre la misma banda
+    {
+        e->selectBand (3); setP (p, ParamID::band (3, "freq"), 1800); setP (p, ParamID::band (3, "gain"), 6); setP (p, ParamID::band (3, "q"), 1.2f);
+        const int order[] = { 0, 1, 2, 3, 4, 5, 6, 7, 8 };
+        seg ("03_tipos", 4.5, [&] (double t, int)
+        {
+            const int k = juce::jlimit (0, 8, (int) (t / 0.5));
+            setP (p, ParamID::band (3, "type"), (float) order[k]);
+            if (order[k] == 3 || order[k] == 4) setP (p, ParamID::band (3, "slope"), 1);
+        });
+        setP (p, ParamID::band (3, "type"), 0); setP (p, ParamID::band (3, "freq"), 2600); setP (p, ParamID::band (3, "gain"), 2.5f); setP (p, ParamID::band (3, "q"), 1.0f);
+    }
+    // 4) Saturacion por banda: los 5 modos con el drive subiendo
+    {
+        e->selectBand (1);
+        seg ("04_saturacion", 5.0, [&] (double t, int)
+        {
+            const int k = juce::jlimit (0, 4, (int) (t / 1.0));
+            setP (p, ParamID::band (1, "satType"), (float) k);
+            setP (p, ParamID::band (1, "drive"), (float) (6 + 14 * ease (std::fmod (t, 1.0) / 0.6)));
+        });
+        setP (p, ParamID::band (1, "drive"), 0);
+    }
+    // 5) EQ dinamica: el bombo y los agudos se controlan solos con la musica
+    {
+        setP (p, ParamID::band (2, "dyn"), 1); setP (p, ParamID::band (2, "thr"), -34); setP (p, ParamID::band (2, "range"), -7);
+        band (6, 0, 7000, 0, 2.5f); setP (p, ParamID::band (6, "dyn"), 1); setP (p, ParamID::band (6, "thr"), -42); setP (p, ParamID::band (6, "range"), -8);
+        setP (p, ParamID::band (6, "atk"), 2); setP (p, ParamID::band (6, "rel"), 60);
+        e->selectBand (6);
+        seg ("05_dinamica", 4.5, [&] (double, int) {});
+    }
+    // 6) Caza de picos (Spectrum Grab): el espectro se congela, se marcan las resonancias y se arrastra una hacia abajo
+    {
+        d->setSpectrumGrab (true);
+        const SpectrumDisplay::GrabPeak* target = nullptr;
+        juce::Point<float> m;
+        bool down = false, up = false;
+        seg ("06_grab", 4.0, [&] (double t, int)
+        {
+            if (t > 1.0 && target == nullptr)
+            {
+                float best = 0;
+                for (auto& pk : d->grabPeaks()) if (pk.alive && pk.major && pk.f > 150 && pk.f < 6000 && pk.prom > best) { best = pk.prom; target = &pk; }
+                if (target) { m = d->peakMarker (*target); d->mouseMove (mouseAt (d, m, m)); }
+            }
+            if (target && t > 1.8 && ! down) { d->mouseDown (mouseAt (d, m, m)); down = true; }
+            if (down && ! up && t <= 3.0)
+            {
+                const auto to = m + juce::Point<float> (0.0f, d->pointFor (1000, -7).y - d->pointFor (1000, 0).y);
+                d->mouseDrag (mouseAt (d, m + (to - m) * (float) ease ((t - 1.8) / 1.0), m));
+            }
+            if (down && ! up && t > 3.0) { d->mouseUp (mouseAt (d, m + juce::Point<float> (0.0f, d->pointFor (1000, -7).y - d->pointFor (1000, 0).y), m)); up = true; }
+        });
+        d->setSpectrumGrab (false);
+        d->mouseExit (mouseAt (d, { 5, 5 }, { 5, 5 }));
+    }
+    // 7) Dibujar la curva con el mouse (SKETCH)
+    {
+        clearAll(); tick (5);
+        const auto bc = d->sketchButtonBounds().getCentre();
+        d->mouseDown (mouseAt (d, bc, bc)); d->mouseUp (mouseAt (d, bc, bc));
+        auto want = [] (double f) { return 4.0 * std::exp (-std::pow (std::log2 (f / 70.0), 2) * 1.5) - 3.0 * std::exp (-std::pow (std::log2 (f / 400.0), 2) * 2.0)
+                                           + 3.5 / (1 + std::pow (8000.0 / f, 2.0)); };
+        juce::Point<float> st = d->pointFor (30, want (30));
+        bool down = false, up = false;
+        seg ("07_dibujar", 4.0, [&] (double t, int)
+        {
+            if (! down) { d->mouseDown (mouseAt (d, st, st)); down = true; }
+            if (t < 2.6) { const double f = 30 * std::pow (19000.0 / 30.0, t / 2.6); d->mouseDrag (mouseAt (d, d->pointFor (f, want (f)), st)); }
+            else if (! up) { d->mouseUp (mouseAt (d, d->pointFor (19000, want (19000)), st)); up = true; }
+        });
+        d->setSketchMode (false); tick (2);
+    }
+    // 8) Estereo: bandas en Mid y en Side
+    {
+        clearAll();
+        for (int b = 0; b < 6; ++b) band (b, bands[b].type, bands[b].f, bands[b].g, bands[b].q, bands[b].slope);
+        band (7, 3, 150, 0, 0.707f, 1); setP (p, ParamID::band (7, "stereo"), 4);   // graves en mono (corte en Side)
+        band (8, 2, 7000, 3.5f, 0.7f); setP (p, ParamID::band (8, "stereo"), 4);    // aire en los lados
+        e->selectBand (7);
+        seg ("08_estereo", 3.5, [&] (double t, int) { if (t > 1.7) e->selectBand (8); });
+    }
+    // 9) Fase y calidad: MIN -> NAT -> LIN, 1x -> 2x -> 4x
+    {
+        e->selectBand (3);
+        seg ("09_fase", 3.5, [&] (double t, int)
+        {
+            const int ph = t < 1.8 ? 0 : t < 2.6 ? 3 : 1;
+            setP (p, ParamID::phase, (float) ph);
+            setP (p, ParamID::quality, ph != 0 ? 0.0f : t < 0.6 ? 0.0f : t < 1.2 ? 1.0f : 2.0f);
+        });
+        setP (p, ParamID::phase, 0); setP (p, ParamID::quality, 0); tick (10);
+    }
+    // 10) ZONE: el EQ solo trabaja dentro de un rango
+    {
+        setP (p, ParamID::rangeLo, 120); setP (p, ParamID::rangeHi, 6000);
+        seg ("10_zone", 3.0, [&] (double t, int)
+        {
+            setP (p, ParamID::rangeOn, t > 0.3 ? 1.0f : 0.0f);
+            setP (p, ParamID::rangeLo, (float) (120 * std::pow (2.0, 1.5 * ease ((t - 0.8) / 1.2))));
+        });
+        setP (p, ParamID::rangeOn, 0);
+    }
+    // 11) Sidechain y MATCH
+    {
+        if (clickText ("SC")) { seg ("11_sc", 2.2, [&] (double, int) {}); closeAll(); }
+        if (clickText ("MATCH")) { seg ("12_match", 2.2, [&] (double, int) {}); closeAll(); }
+    }
+    // 12) Presets de fabrica (cada uno arma su curva)
+    {
+        const juce::StringArray names { "Kick Tech House", "Voz Lead Clara", "Bajo Growl Dubstep", "Mix Bus Pegamento", "Master Tech House" };
+        auto entries = p.presets.entries();
+        std::vector<int> idx;
+        for (auto& nm : names) for (int i = 0; i < (int) entries.size(); ++i) if (entries[(size_t) i].name == nm) idx.push_back (i);
+        juce::String list;
+        seg ("13_presets", 5.0, [&] (double t, int)
+        {
+            const int k = juce::jlimit (0, (int) idx.size() - 1, (int) (t / 1.0));
+            if (p.presets.currentIndex() != idx[(size_t) k]) { p.presets.load (idx[(size_t) k]); e->selectBand (0); }
+        });
+        std::printf ("presets: %d encontrados\n", (int) idx.size());
+        p.apvts.state.setProperty ("presetName_p", "Default", nullptr); p.apvts.state.setProperty ("presetIndex_p", -1, nullptr);
+    }
+    // 13) Vintage: perillas de Pultec con el sonido cambiando
+    {
+        clearAll();
+        setP (p, ParamID::mode, 1); setP (p, ParamID::vLowFreq, 2);
+        seg ("14_vintage", 5.0, [&] (double t, int)
+        {
+            setP (p, ParamID::vLowBoost, (float) (7 * ease (t / 1.4)));
+            setP (p, ParamID::vLowAtten, (float) (5 * ease ((t - 1.0) / 1.2)));
+            setP (p, ParamID::vHighBoost, (float) (6 * ease ((t - 2.0) / 1.2)));
+            setP (p, ParamID::vTube, (float) (55 * ease ((t - 3.0) / 1.5)));
+        });
+        e->setAdvanced (true); tick (10);
+        seg ("15_avanzado", 3.0, [&] (double t, int)
+        {
+            setP (p, ParamID::vLmBoost, (float) (4 * ease (t / 1.2)));
+            setP (p, ParamID::vIron, (float) (60 * ease ((t - 1.0) / 1.5)));
+        });
+        e->setAdvanced (false);
+    }
+    // 14) Vista final: todo armado, auto gain encendido
+    {
+        setP (p, ParamID::mode, 0); clearAll();
+        for (int b = 0; b < 6; ++b) band (b, bands[b].type, bands[b].f, bands[b].g, bands[b].q, bands[b].slope);
+        setP (p, ParamID::band (1, "drive"), 9); setP (p, ParamID::band (3, "dyn"), 1); setP (p, ParamID::band (3, "thr"), -38); setP (p, ParamID::band (3, "range"), -5);
+        setP (p, ParamID::autoGain, 1); e->selectBand (1); tick (20);
+        seg ("16_final", 3.5, [&] (double, int) {});
+    }
+    return 0;
+}
+}
+
 int main (int argc, char** argv)
 {
     GauxEqProcessor::forceUiForTests = true;   // las pruebas leen medidores y calavera sin abrir la ventana
@@ -513,6 +775,7 @@ int main (int argc, char** argv)
     const juce::String outDir = argc > 1 ? argv[1] : ".";
     if (argc > 2 && juce::String (argv[2]) == "auditoria") return audit::run (outDir) == 0 ? 0 : 1;
     if (argc > 2 && juce::String (argv[2]) == "guia") return guide::run (outDir);
+    if (argc > 3 && juce::String (argv[2]) == "video") return video::run (outDir, argv[3]);
     if (argc > 2 && juce::String (argv[2]) == "fps")
     {
         // Medicion de costo de dibujo por cuadro (pantalla Retina: escala 2x)

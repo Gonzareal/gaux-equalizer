@@ -2747,7 +2747,7 @@ static void presetTests()
             const juce::String n = e.name;
             if (n.contains ("De-Esser"))            { const double v = bandChangeDb (x, y, pk.fs, 5500, 11000); need ("6-10 kHz", v, v < -1.0); }
             if (n.contains ("Graves en Mono"))      { const double v = bandChangeDb (x, y, pk.fs, 20, 90, 'S'); need ("lados <90 Hz", v, v < -15.0); }
-            if (n.contains ("Aire"))                { const double v = bandChangeDb (x, y, pk.fs, 12000, 19000); need ("aire 12-19 kHz", v, v > 0.8); }
+            if (n.contains ("Aire"))                { const double v = bandChangeDb (x, y, pk.fs, 12000, 19000); need ("aire 12-19 kHz", v, v > 0.7); }   // (shelf suave de +2 dB en 16 kHz con AUTO GAIN al volumen exacto: de 12 a 19 kHz sube ~0.8 dB de promedio)
             if (n.contains ("Sub Profundo"))        { const double v = bandChangeDb (x, y, pk.fs, 40, 65); need ("40-65 Hz", v, v > 1.5); }
             if (n.contains ("Hats"))                { const double v = bandChangeDb (x, y, pk.fs, 30, 250); need ((juce::String ("<250 Hz (") + juce::String (juce::roundToInt (10 * std::log10 (gBandShare))) + " dB de la pista)").toRawUTF8(), v, v < -10.0 || gBandShare < 1e-4); }
             if (n.contains ("Lo-Fi") || n.contains ("Telefono")) { const double a = bandChangeDb (x, y, pk.fs, 30, 200), b = bandChangeDb (x, y, pk.fs, 7000, 16000); need ("graves", a, a < -8.0); need ("agudos", b, b < -8.0); }
@@ -4673,6 +4673,7 @@ static void hardeningTests()
 }
 
 #include "LabTests.inc"
+#include "SessionTests.inc"
 
 int main (int argc, char** argv)
 {
@@ -4741,6 +4742,7 @@ int main (int argc, char** argv)
     auditTests();
     hardeningTests();
     labTests();
+    sessionTests();
     std::cout << "\nRESUMEN: " << gChecks << " comprobaciones, " << gFails << " fallas, " << gWarn << " avisos" << std::endl;
     return gFails == 0 ? 0 : 1;
 }

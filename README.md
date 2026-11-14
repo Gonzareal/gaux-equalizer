@@ -1,6 +1,14 @@
-# Gaux Equalizer v0.24
+# Gaux Equalizer v0.25
 
 EQ para producción de música electrónica, desde la mezcla de cada instrumento hasta el mastering. Dos caras:
+
+## Novedades v0.25 (310 pruebas de sesiones reales)
+- **AUTO GAIN como un medidor de LUFS**: ahora calcula el cambio de volumen con la ponderación K de los medidores de loudness y el reparto típico de una mezcla (80 % centro, 20 % lados). Con los 40 presets queda a ±0.3 LU del volumen original (antes hasta 1.5 LU de diferencia en presets con realce de agudos, cortes de graves o bandas en Side).
+- **310 pruebas nuevas de sesiones reales**, sobre una canción con bombo, snare, hats, bajo, pad, lead y voz:
+  - los **40 presets de fábrica** uno por uno, 6 pruebas cada uno: suena, no salta de volumen sobre su pista, AUTO GAIN lo iguala, guardar y abrir el proyecto suena idéntico, lo que se ve es lo que suena y la misma curva a 96 kHz;
+  - **Ableton**: cada buffer (32 a 2048), bloques que cambian en cada llamada, loops, stop/play con el plugin dormido, bypass apretado 60 veces;
+  - **cada frecuencia de muestreo** de 44.1 a 192 kHz;
+  - **trabajos de ingeniería medidos**: low cut de 48 dB, de-esser, graves en mono, kick contra bajo por sidechain, notch de resonancia, tilt, SC general.
 
 ## Novedades v0.24 (laboratorio: 194 mediciones de la industria)
 - **Validador oficial de Steinberg (VST3 SDK)**: 537 pruebas, todas pasan. Encontró que el programa del plugin no tenía nombre (Cubase muestra la lista de programas): ahora se llama "Default".
