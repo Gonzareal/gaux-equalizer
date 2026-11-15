@@ -962,7 +962,7 @@ static int run (const juce::String& outDir, const juce::String& musicFile)
     clearAll(); mix(); setP (p, ParamID::band (3, "dyn"), 1); setP (p, ParamID::band (3, "thr"), -38); setP (p, ParamID::band (3, "range"), -4);
     setP (p, ParamID::autoGain, 1); e->selectBand (1); carry += 6;
     seg ("12_final", 3.5, [&] (double) { chip = -1; label = "Tu mezcla, terminada"; value = "AUTO GAIN al mismo volumen"; });
-    audioOnly ("99_outro", 3.8);
+    audioOnly ("99_outro", 6.2);
     audioOut.flush(); tl.flush();
     return 0;
 }
