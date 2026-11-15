@@ -372,7 +372,7 @@ float GauxEqProcessor::estimateCurveLoudnessDb (bool vintageMode) const
     // arriba de 1.7 kHz). Asi AUTO GAIN deja el volumen igual en un medidor de LUFS, tambien con realces de agudos
     // o cortes de graves (antes promediaba todas las octavas igual y se quedaba hasta 1.5 LU corto).
     const double fs = currentSampleRate.load();
-    constexpr int points = 64;
+    static constexpr int points = 64;   // (static: MSVC no deja usarla dentro de la lambda sin capturarla)
     std::array<gaux::BandSettings, gaux::kNumBands> bs;
     for (int b = 0; b < gaux::kNumBands; ++b) bs[(size_t) b] = params.band (b);
     const auto v = params.vintage();
