@@ -740,19 +740,21 @@ static int run (const juce::String& outDir, const juce::String& musicFile)
     // 13) Vintage: perillas de Pultec con el sonido cambiando
     {
         clearAll();
-        setP (p, ParamID::mode, 1); setP (p, ParamID::vLowFreq, 2);
-        seg ("14_vintage", 5.0, [&] (double t, int)
-        {
-            setP (p, ParamID::vLowBoost, (float) (7 * ease (t / 1.4)));
-            setP (p, ParamID::vLowAtten, (float) (5 * ease ((t - 1.0) / 1.2)));
-            setP (p, ParamID::vHighBoost, (float) (6 * ease ((t - 2.0) / 1.2)));
-            setP (p, ParamID::vTube, (float) (55 * ease ((t - 3.0) / 1.5)));
-        });
+        setP (p, ParamID::mode, 1); setP (p, ParamID::vLowFreq, 2); setP (p, ParamID::vHighFreq, 3); setP (p, ParamID::vAttenFreq, 1);
         e->setAdvanced (true); tick (10);
+        // Una perilla a la vez, en vista avanzada para que se vea la curva (los tiempos coinciden con los textos del video)
+        seg ("14_vintage", 6.0, [&] (double t, int)
+        {
+            setP (p, ParamID::vLowBoost, (float) (7 * ease ((t - 0.4) / 1.0)));
+            setP (p, ParamID::vLowAtten, (float) (4 * ease ((t - 1.6) / 1.0)));
+            setP (p, ParamID::vHighBoost, (float) (6 * ease ((t - 2.8) / 1.0)));
+            setP (p, ParamID::vHighAtten, (float) (4 * ease ((t - 4.0) / 1.0)));
+        });
+        tick (10);
         seg ("15_avanzado", 3.0, [&] (double t, int)
         {
-            setP (p, ParamID::vLmBoost, (float) (4 * ease (t / 1.2)));
-            setP (p, ParamID::vIron, (float) (60 * ease ((t - 1.0) / 1.5)));
+            setP (p, ParamID::vLmBoost, (float) (4 * ease ((t - 0.2) / 1.0)));
+            setP (p, ParamID::vIron, (float) (60 * ease ((t - 1.4) / 1.2)));
         });
         e->setAdvanced (false);
     }
@@ -768,6 +770,204 @@ static int run (const juce::String& outDir, const juce::String& musicFile)
 }
 }
 
+
+//==============================================================================
+// VIDEO 2: el plugin actuando de verdad, con su audio. Cada cuadro procesa 1/30 s de musica y guarda la salida
+// del plugin: el sonido del video es exactamente lo que el EQ le hace a la musica en ese momento.
+namespace video2
+{
+static int run (const juce::String& outDir, const juce::String& musicFile)
+{
+    using namespace gaux;
+    std::vector<float> music;
+    { juce::FileInputStream in ((juce::File (musicFile))); const auto n = in.getTotalLength() / 4; music.resize ((size_t) n); in.read (music.data(), (int) (n * 4)); }
+    size_t mpos = 0;
+    juce::File (outDir + "/audio.f32").deleteFile();
+    juce::FileOutputStream audioOut ((juce::File (outDir + "/audio.f32")));
+    juce::File (outDir + "/timeline.tsv").deleteFile();
+    juce::FileOutputStream tl ((juce::File (outDir + "/timeline.tsv")));
+    GauxEqProcessor p; p.prepareToPlay (48000.0, 400);
+    std::unique_ptr<juce::AudioProcessorEditor> ed (p.createEditor());
+    auto* e = dynamic_cast<GauxEqEditor*> (ed.get());
+    p.apvts.state.setProperty ("uiZoom", 1.0, nullptr);
+    e->setUiScale (MainView::kBaseScale);
+    juce::AudioBuffer<float> buf (2, 400); juce::MidiBuffer midi;
+    auto feed = [&] (bool record)
+    {
+        for (int done = 0; done < 1600; done += 400)
+        {
+            for (int i = 0; i < 400; ++i)
+            {
+                if (mpos + 1 >= music.size()) mpos = 0;
+                buf.setSample (0, i, music[mpos] * 0.45f); buf.setSample (1, i, music[mpos + 1] * 0.45f); mpos += 2;
+            }
+            p.processBlock (buf, midi);
+            if (record) for (int i = 0; i < 400; ++i) { audioOut.writeFloat (buf.getSample (0, i)); audioOut.writeFloat (buf.getSample (1, i)); }
+        }
+    };
+    auto tickRec = [&] { feed (true); juce::MessageManager::getInstance()->runDispatchLoopUntil (2); pumpFrames (*ed); };
+    auto band = [&] (int b, int type, float f, float g, float q, int slope = 1)
+    {
+        setP (p, ParamID::band (b, "type"), (float) type); setP (p, ParamID::band (b, "freq"), f); setP (p, ParamID::band (b, "gain"), g);
+        setP (p, ParamID::band (b, "q"), q); setP (p, ParamID::band (b, "slope"), (float) slope); setP (p, ParamID::band (b, "on"), 1);
+    };
+    auto clearAll = [&] { for (int b = 0; b < kNumBands; ++b) { setP (p, ParamID::band (b, "on"), 0); setP (p, ParamID::band (b, "drive"), 0); setP (p, ParamID::band (b, "dyn"), 0);
+                                                               setP (p, ParamID::band (b, "stereo"), 0); setP (p, ParamID::band (b, "byp"), 0); } p.soloBand = -1; };
+    auto pv = [&] (const juce::String& id) { return p.apvts.getParameter (id)->getCurrentValueAsText(); };
+    juce::JPEGImageFormat jpg; jpg.setQuality (0.94f);
+    juce::String segDir, segName, label, value; int frame = 0, chip = -1;
+    auto shoot = [&]
+    {
+        auto img = ed->createComponentSnapshot (ed->getLocalBounds(), true, 2.0f);
+        juce::File f (segDir + juce::String::formatted ("/f_%04d.jpg", frame));
+        f.deleteFile(); juce::FileOutputStream os (f); jpg.writeImageToStream (img, os);
+        tl.writeText (segName + "\t" + juce::String (frame) + "\t" + juce::String (chip) + "\t" + label + "\t" + value + "\n", false, false, nullptr);
+        ++frame;
+    };
+    int carry = 0;
+    auto seg = [&] (const juce::String& name, double secs, const std::function<void (double)>& act)
+    {
+        segName = name; segDir = outDir + "/" + name; juce::File (segDir).deleteRecursively(); juce::File (segDir).createDirectory(); frame = 0;
+        if (carry > 0) act (0.0);   // (los textos y ajustes del segmento rigen desde su primer cuadro)
+        for (int i = 0; i < carry; ++i) { tickRec(); shoot(); }   // (el cambio de ajustes se ve y se oye desde el primer cuadro)
+        carry = 0;
+        const int n = (int) std::lround (secs * 30.0);
+        for (int i = 0; i < n; ++i) { act (i / 30.0); tickRec(); shoot(); }
+        std::printf ("segmento %s: %d cuadros\n", name.toRawUTF8(), frame); std::fflush (stdout);
+    };
+    auto audioOnly = [&] (const juce::String& name, double secs)
+    {
+        const int n = (int) std::lround (secs * 30.0);
+        for (int i = 0; i < n; ++i) tickRec();
+        tl.writeText (name + "\t" + juce::String (n) + "\t-1\t\t\n", false, false, nullptr);
+        std::printf ("audio %s: %d cuadros\n", name.toRawUTF8(), n); std::fflush (stdout);
+    };
+    auto ease = [] (double x) { x = juce::jlimit (0.0, 1.0, x); return x * x * (3 - 2 * x); };
+    auto mix = [&] { band (0, 3, 28, 0, 0.707f, 1); band (1, 0, 58, 3.5f, 1.1f); band (2, 0, 320, -3.0f, 1.6f); band (3, 0, 2800, 2.0f, 0.9f); band (4, 2, 10000, 3.5f, 0.7f); };
+    auto hz = [] (double f) { return f >= 1000 ? juce::String (f / 1000.0, f >= 10000 ? 1 : 2) + " kHz" : juce::String ((int) std::lround (f)) + " Hz"; };
+
+    clearAll(); setP (p, ParamID::bypass, 1);
+    for (int i = 0; i < 45; ++i) { const size_t m0 = mpos; feed (false); mpos = m0; juce::MessageManager::getInstance()->runDispatchLoopUntil (2); pumpFrames (*ed); }
+    audioOnly ("00_intro", 2.6);
+
+    // 1) A/B
+    mix(); e->selectBand (1);
+    seg ("01_ab", 6.0, [&] (double t)
+    {
+        const bool off = t < 2.0 || (t >= 4.0 && t < 4.8);
+        setP (p, ParamID::bypass, off ? 1.0f : 0.0f);
+        chip = off ? 0 : 1; label = off ? "SIN EQ" : "CON GAUX EQ"; value = off ? "bypass" : "graves +3.5 dB, barro -3 dB, aire +3.5 dB";
+    });
+    setP (p, ParamID::bypass, 0);
+    // 2) Low cut
+    clearAll(); band (0, 3, 20, 0, 1.3f, 1); e->selectBand (0);
+    seg ("02_lowcut", 5.5, [&] (double t)
+    {
+        const double u = t < 2.6 ? ease (t / 2.6) : 1.0 - ease ((t - 3.0) / 2.2);
+        const double f = 20.0 * std::pow (1500.0 / 20.0, u);
+        setP (p, ParamID::band (0, "freq"), (float) f);
+        chip = t < 2.6 ? 0 : 1; label = t < 2.6 ? "El low cut sube" : "y vuelve a bajar"; value = "LOW CUT  " + hz (f) + "  ·  24 dB/oct";
+    });
+    // 3) High cut
+    clearAll(); band (0, 4, 20000, 0, 1.3f, 1); e->selectBand (0); carry += 3;
+    seg ("03_highcut", 5.0, [&] (double t)
+    {
+        const double u = t < 2.3 ? ease (t / 2.3) : 1.0 - ease ((t - 2.7) / 2.0);
+        const double f = 20000.0 * std::pow (400.0 / 20000.0, u);
+        setP (p, ParamID::band (0, "freq"), (float) f);
+        chip = t < 2.3 ? 0 : 1; label = t < 2.3 ? "El high cut baja" : "y se abre otra vez"; value = "HIGH CUT  " + hz (f);
+    });
+    // 4) Barrido
+    clearAll(); band (0, 0, 100, 12, 5.0f); e->selectBand (0); carry += 3;
+    seg ("04_barrido", 4.5, [&] (double t)
+    {
+        const double f = 100.0 * std::pow (8000.0 / 100.0, ease (t / 4.5));
+        setP (p, ParamID::band (0, "freq"), (float) f);
+        chip = 0; label = "Campana de +12 dB barriendo"; value = "BELL  " + hz (f) + "  ·  +12 dB  ·  Q 5";
+    });
+    // 5) Solo
+    clearAll(); mix(); band (5, 0, 2500, 0, 2.5f); e->selectBand (5); carry += 3;
+    seg ("05_solo", 4.5, [&] (double t)
+    {
+        const bool on = t > 0.5 && t < 4.0;
+        p.soloBand = on ? 5 : -1;
+        const double f = 2500.0 * std::pow (2.0, 1.5 * std::sin (t * 1.4));
+        setP (p, ParamID::band (5, "freq"), (float) f);
+        chip = on ? 1 : 0; label = on ? "SOLO: solo se oye esta banda" : "Mezcla completa"; value = on ? "BANDA 6  " + hz (f) : "";
+    });
+    p.soloBand = -1;
+    // 6) Saturacion
+    clearAll(); mix(); setP (p, ParamID::band (1, "gain"), 4.0f); e->selectBand (1); carry += 3;
+    seg ("06_saturacion", 6.0, [&] (double t)
+    {
+        const int order[] = { 0, 1, 3, 4 };
+        const char* names[] = { "TUBE", "TAPE", "HARD", "FUZZ" };
+        const int k = juce::jlimit (0, 3, (int) ((t - 0.6) / 1.35));
+        setP (p, ParamID::band (1, "satType"), (float) order[k]);
+        setP (p, ParamID::band (1, "drive"), t < 0.6 ? 0.0f : 20.0f);
+        chip = t < 0.6 ? -1 : k; label = t < 0.6 ? "Graves limpios" : juce::String ("Graves saturados: ") + names[k]; value = t < 0.6 ? "DRIVE 0 dB" : "BANDA 2 · 58 Hz · DRIVE 20 dB";
+    });
+    setP (p, ParamID::band (1, "drive"), 0);
+    // 7) Dinamica
+    clearAll(); mix(); setP (p, ParamID::band (1, "dyn"), 1); setP (p, ParamID::band (1, "thr"), -30); setP (p, ParamID::band (1, "range"), -9);
+    setP (p, ParamID::band (1, "atk"), 1); setP (p, ParamID::band (1, "rel"), 90); setP (p, ParamID::band (1, "gain"), 0);
+    band (6, 0, 6500, 0, 2.0f); setP (p, ParamID::band (6, "dyn"), 1); setP (p, ParamID::band (6, "thr"), -40); setP (p, ParamID::band (6, "range"), -9);
+    e->selectBand (1); carry += 3;
+    seg ("07_dinamica", 4.5, [&] (double)
+    {
+        chip = 0; label = "Bandas que bajan solas con cada golpe";
+        value = "58 Hz: " + juce::String (p.dynGainDb[1].load(), 1) + " dB   ·   6.5 kHz: " + juce::String (p.dynGainDb[6].load(), 1) + " dB";
+    });
+    // 8) Vintage en vista avanzada (se ve la curva): cada perilla por separado, con tiempo para oirla
+    clearAll(); setP (p, ParamID::mode, 1); setP (p, ParamID::vLowFreq, 2); setP (p, ParamID::vHighFreq, 3); setP (p, ParamID::vAttenFreq, 1);
+    for (auto* id : { &ParamID::vLowBoost, &ParamID::vLowAtten, &ParamID::vHighBoost, &ParamID::vHighAtten, &ParamID::vTube, &ParamID::vAirGain, &ParamID::vIron }) setP (p, *id, 0);
+    e->setAdvanced (true); carry += 8;
+    seg ("08_vintage", 10.0, [&] (double t)
+    {
+        const double lb = ease ((t - 0.7) / 1.2);
+        setP (p, ParamID::vLowBoost, (float) (7 * lb));
+        setP (p, ParamID::vLowAtten, (float) (4 * ease ((t - 2.6) / 1.0)));
+        setP (p, ParamID::vHighBoost, (float) (6 * ease ((t - 4.3) / 1.0)));
+        setP (p, ParamID::vHighAtten, (float) (4 * ease ((t - 6.0) / 0.8)));
+        setP (p, ParamID::output, (float) (-4.0 * lb));   // compensa el nivel para no saturar la salida
+        const bool off = t >= 7.9 && t < 8.9;
+        setP (p, ParamID::bypass, off ? 1.0f : 0.0f);
+        if (t < 0.7)      { chip = -1; label = "Vintage GX-1 en cero: no colorea"; value = "todas las perillas en 0"; }
+        else if (t < 2.6) { chip = 0; label = "LOW BOOST en 60 Hz: mas graves"; value = "LOW BOOST " + pv (ParamID::vLowBoost); }
+        else if (t < 4.3) { chip = 1; label = "+ LOW ATTEN: el truco Pultec"; value = "LOW ATTEN " + pv (ParamID::vLowAtten) + "  ·  menos barro arriba del bombo"; }
+        else if (t < 6.0) { chip = 2; label = "HIGH BOOST en 8 kHz: brillo"; value = "HIGH BOOST " + pv (ParamID::vHighBoost); }
+        else if (t < 7.3) { chip = 3; label = "HIGH ATTEN 10 kHz: suaviza el filo"; value = "HIGH ATTEN " + pv (ParamID::vHighAtten); }
+        else if (! off)   { chip = 4; label = t < 7.9 ? "Escucha la diferencia" : "CON VINTAGE"; value = "LOW 7 · ATTEN 4 · HIGH 6 · ATTEN 4"; }
+        else              { chip = 4; label = "SIN VINTAGE"; value = "bypass"; }
+    });
+    setP (p, ParamID::bypass, 0); setP (p, ParamID::output, 0);
+    e->setAdvanced (false);
+    // 9) Presets
+    {
+        auto loadByName = [&] (const juce::String& nm)
+        {
+            auto entries = p.presets.entries();
+            for (int i = 0; i < (int) entries.size(); ++i) if (entries[(size_t) i].name == nm) { p.presets.load (i); return true; }
+            return false;
+        };
+        loadByName ("Lo-Fi Radio"); carry += 4;
+        seg ("09_radio", 2.7, [&] (double) { chip = 0; label = "Preset: Lo-Fi Radio"; value = "Vintage"; });
+        setP (p, ParamID::mode, 0); clearAll(); loadByName ("Voz Lo-Fi Telefono"); e->selectBand (2); carry += 4;
+        seg ("10_telefono", 2.7, [&] (double) { chip = 1; label = "Preset: Voz Lo-Fi Telefono"; value = "Parametrico"; });
+        clearAll(); loadByName ("Master Tech House"); e->selectBand (1); carry += 4;
+        seg ("11_master", 3.0, [&] (double) { chip = 2; label = "Preset: Master Tech House"; value = "Parametrico + AUTO GAIN"; });
+    }
+    // 10) Final
+    p.apvts.state.setProperty ("presetName_p", "Default", nullptr); p.apvts.state.setProperty ("presetIndex_p", -1, nullptr);
+    clearAll(); mix(); setP (p, ParamID::band (3, "dyn"), 1); setP (p, ParamID::band (3, "thr"), -38); setP (p, ParamID::band (3, "range"), -4);
+    setP (p, ParamID::autoGain, 1); e->selectBand (1); carry += 6;
+    seg ("12_final", 3.5, [&] (double) { chip = -1; label = "Tu mezcla, terminada"; value = "AUTO GAIN al mismo volumen"; });
+    audioOnly ("99_outro", 3.8);
+    audioOut.flush(); tl.flush();
+    return 0;
+}
+}
+
 int main (int argc, char** argv)
 {
     GauxEqProcessor::forceUiForTests = true;   // las pruebas leen medidores y calavera sin abrir la ventana
@@ -776,6 +976,7 @@ int main (int argc, char** argv)
     if (argc > 2 && juce::String (argv[2]) == "auditoria") return audit::run (outDir) == 0 ? 0 : 1;
     if (argc > 2 && juce::String (argv[2]) == "guia") return guide::run (outDir);
     if (argc > 3 && juce::String (argv[2]) == "video") return video::run (outDir, argv[3]);
+    if (argc > 3 && juce::String (argv[2]) == "video2") return video2::run (outDir, argv[3]);
     if (argc > 2 && juce::String (argv[2]) == "fps")
     {
         // Medicion de costo de dibujo por cuadro (pantalla Retina: escala 2x)
