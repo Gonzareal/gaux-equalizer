@@ -14,6 +14,7 @@
 #include "DSP/SketchCurve.h"
 #include "DSP/NaturalPhase.h"
 #include "DSP/SpectrumLearner.h"
+#include "UpdateChecker.h"
 
 using namespace gaux;
 using Cx = std::complex<double>;
@@ -4674,6 +4675,7 @@ static void hardeningTests()
 
 #include "LabTests.inc"
 #include "SessionTests.inc"
+#include "StressTests.inc"
 
 int main (int argc, char** argv)
 {
@@ -4719,6 +4721,9 @@ int main (int argc, char** argv)
     }
     if (argc > 2 && (juce::String (argv[1]) == "golden-write" || juce::String (argv[1]) == "golden-check"))
         return goldenMain (juce::String (argv[1]) == "golden-write", juce::File (argv[2]));
+    if (argc > 2 && juce::String (argv[1]) == "dbg-golden") return debugGolden (argv[2]);
+    if (argc > 2 && juce::String (argv[1]) == "dbg-state") return debugState ((unsigned) juce::String (argv[2]).getIntValue());
+    if (argc > 2 && juce::String (argv[1]) == "dbg-bypass") return debugBypass ((unsigned) juce::String (argv[2]).getIntValue());
     if (argc > 1) gFilter = argv[1];
     GauxEqProcessor::forceUiForTests = true;   // las pruebas leen los medidores de la dinamica
     std::cout << "=== MIXLAB: Gaux Equalizer en sesiones reales ===" << std::endl;
@@ -4743,6 +4748,7 @@ int main (int argc, char** argv)
     hardeningTests();
     labTests();
     sessionTests();
+    stressMaxTests();
     std::cout << "\nRESUMEN: " << gChecks << " comprobaciones, " << gFails << " fallas, " << gWarn << " avisos" << std::endl;
     return gFails == 0 ? 0 : 1;
 }

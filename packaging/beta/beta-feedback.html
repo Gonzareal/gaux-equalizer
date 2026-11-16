@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Gaux EQ Beta · Feedback</title>
+<meta name="description" content="Cuéntanos cómo te va con la beta de Gaux Equalizer.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+/* Manual de marca: Rojo Gaux #D2050F, Blanco Brocha #F0F0F0, Negro Gaux #0A0A0A, Gris Humo #2A2A2A, Montserrat */
+:root { --red:#D2050F; --white:#F0F0F0; --black:#0A0A0A; --smoke:#2A2A2A; --dim:#9a9a9a; --line:#232323; }
+* { box-sizing:border-box; }
+html,body { margin:0; background:var(--black); color:var(--white); font-family:Montserrat,system-ui,sans-serif; }
+body { min-height:100vh; }
+.wrap { max-width:720px; margin:0 auto; padding:40px 16px 64px; }
+.top { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:28px; }
+.brand { letter-spacing:.32em; font-weight:600; font-size:14px; }
+.brand b { color:var(--red); font-weight:600; }
+.lang { display:flex; border:1px solid var(--smoke); border-radius:999px; overflow:hidden; }
+.lang button { background:none; color:var(--dim); border:0; padding:7px 14px; font:600 12px Montserrat,sans-serif; cursor:pointer; }
+.lang button.on { background:var(--smoke); color:var(--white); }
+h1 { font-size:clamp(28px,6vw,44px); line-height:1.05; margin:0 0 10px; font-weight:800; letter-spacing:-.01em; }
+h1 span { color:var(--red); }
+.badge { display:inline-block; background:var(--red); color:#fff; font-size:12px; font-weight:700; letter-spacing:.16em; border-radius:4px; padding:3px 8px; vertical-align:middle; margin-left:6px; }
+.lead { color:var(--dim); line-height:1.6; margin:0 0 28px; }
+form { display:grid; gap:18px; }
+fieldset { border:1px solid var(--line); border-radius:12px; padding:18px; margin:0; display:grid; gap:14px; }
+legend { padding:0 8px; font-weight:700; letter-spacing:.18em; font-size:12px; color:var(--red); text-transform:uppercase; }
+label { display:grid; gap:6px; font-size:14px; font-weight:600; }
+label small { color:var(--dim); font-weight:400; }
+input[type=text], input[type=email], input[type=url], select, textarea {
+  width:100%; background:#121212; border:1px solid var(--smoke); color:var(--white); border-radius:8px; padding:11px 12px;
+  font:400 15px Montserrat,sans-serif; outline:none; }
+input:focus, select:focus, textarea:focus { border-color:var(--red); }
+textarea { min-height:96px; resize:vertical; }
+.row { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+@media (max-width:560px) { .row { grid-template-columns:1fr; } }
+.chips { display:flex; flex-wrap:wrap; gap:8px; }
+.chips input { position:absolute; opacity:0; pointer-events:none; }
+.chips label { display:inline-flex; align-items:center; border:1px solid var(--smoke); border-radius:999px; padding:8px 14px; font-weight:500; cursor:pointer; user-select:none; }
+.chips input:checked + span { color:#fff; }
+.chips label:has(input:checked) { background:var(--red); border-color:var(--red); }
+.chips input:focus-visible + span { outline:2px solid var(--white); outline-offset:4px; border-radius:4px; }
+.actions { display:flex; flex-wrap:wrap; gap:12px; align-items:center; }
+button.primary { background:var(--red); color:#fff; border:0; border-radius:999px; padding:14px 26px; font:700 14px Montserrat,sans-serif; letter-spacing:.14em; cursor:pointer; }
+button.ghost { background:none; color:var(--white); border:1px solid var(--white); border-radius:999px; padding:13px 22px; font:600 13px Montserrat,sans-serif; letter-spacing:.12em; cursor:pointer; }
+button:disabled { opacity:.5; cursor:default; }
+.hint { color:var(--dim); font-size:13px; line-height:1.5; }
+.msg { display:none; border-left:3px solid var(--red); background:#141010; padding:14px 16px; border-radius:6px; line-height:1.5; }
+.msg.show { display:block; }
+.req { color:var(--red); }
+footer { margin-top:40px; color:var(--dim); font-size:12px; letter-spacing:.2em; text-transform:uppercase; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <div class="brand">ALEKSANDER <b>GAUX</b></div>
+    <div class="lang" role="group" aria-label="Idioma / Language">
+      <button type="button" data-lang="es" class="on">ES</button><button type="button" data-lang="en">EN</button>
+    </div>
+  </div>
+
+  <h1><span data-t="title1">Gaux EQ</span> <span class="badge">BETA</span><br><span data-t="title2" style="color:var(--white)">Cuéntanos cómo te va</span></h1>
+  <p class="lead" data-t="lead">Gracias por probar la beta. Si algo falla, suena raro o se te ocurre una mejora, cuéntalo aquí: cada reporte lo revisamos y lo convertimos en una corrección para la versión final.</p>
+
+  <form id="f" novalidate>
+    <fieldset>
+      <legend data-t="lg1">Qué pasó</legend>
+      <div>
+        <div style="font-weight:600;font-size:14px;margin-bottom:8px" data-t="kindQ">Tipo de reporte <span class="req">*</span></div>
+        <div class="chips" id="kind">
+          <label><input type="radio" name="kind" value="Fallo / error" required><span data-t="k1">Fallo / error</span></label>
+          <label><input type="radio" name="kind" value="Se cierra el DAW"><span data-t="k2">Se cierra el DAW</span></label>
+          <label><input type="radio" name="kind" value="Sonido raro"><span data-t="k3">Sonido raro</span></label>
+          <label><input type="radio" name="kind" value="Instalación"><span data-t="k4">Instalación</span></label>
+          <label><input type="radio" name="kind" value="Sugerencia"><span data-t="k5">Sugerencia</span></label>
+          <label><input type="radio" name="kind" value="Me encanta"><span data-t="k6">Me encanta</span></label>
+        </div>
+      </div>
+      <label><span data-t="whatQ">¿Qué pasó? <span class="req">*</span></span>
+        <textarea name="what" required maxlength="3000" data-ph="whatPh" placeholder="Ej.: al mover la banda 3 con la rueda del mouse se escucha un clic."></textarea></label>
+      <label><span data-t="stepsQ">¿Qué estabas haciendo justo antes? <small>(pasos para repetirlo)</small></span>
+        <textarea name="steps" maxlength="3000" data-ph="stepsPh" placeholder="1. Cargué el preset Kick Tech House&#10;2. Cambié a fase LIN&#10;3. ..."></textarea></label>
+      <div class="row">
+        <label><span data-t="repQ">¿Pasa siempre?</span>
+          <select name="repeat"><option value="" data-t="sel">Elige…</option><option data-t="r1">Siempre</option><option data-t="r2">A veces</option><option data-t="r3">Solo una vez</option></select></label>
+        <label><span data-t="sevQ">¿Qué tan grave es?</span>
+          <select name="severity"><option value="" data-t="sel">Elige…</option><option data-t="s1">No puedo usarlo</option><option data-t="s2">Molesta pero sigo</option><option data-t="s3">Detalle menor</option></select></label>
+      </div>
+      <label><span data-t="linkQ">Link a un video o captura <small>(opcional: Drive, Dropbox, WeTransfer…)</small></span>
+        <input type="url" name="link" maxlength="500" placeholder="https://"></label>
+    </fieldset>
+
+    <fieldset>
+      <legend data-t="lg2">Tu equipo</legend>
+      <div class="row">
+        <label><span data-t="osQ">Sistema <span class="req">*</span></span>
+          <select name="os" required><option value="" data-t="sel">Elige…</option><option>Mac Apple Silicon (M1–M5)</option><option>Mac Intel</option><option>Windows 11</option><option>Windows 10</option><option data-t="other">Otro</option></select></label>
+        <label><span data-t="osvQ">Versión del sistema</span>
+          <input type="text" name="osVersion" maxlength="60" data-ph="osvPh" placeholder="Ej.: macOS 15.1 / Windows 11 24H2"></label>
+      </div>
+      <div class="row">
+        <label><span data-t="dawQ">DAW y versión <span class="req">*</span></span>
+          <input type="text" name="daw" required maxlength="80" list="daws" data-ph="dawPh" placeholder="Ej.: Ableton Live 12.1"></label>
+        <label><span data-t="fmtQ">Formato</span>
+          <select name="format"><option value="" data-t="sel">Elige…</option><option>VST3</option><option>AU (Audio Unit)</option><option data-t="app">App independiente</option><option data-t="dk">No sé</option></select></label>
+      </div>
+      <datalist id="daws"><option>Ableton Live 12</option><option>Ableton Live 11</option><option>Logic Pro</option><option>FL Studio 2024</option><option>Cubase 14</option><option>Studio One 7</option><option>Reaper 7</option><option>Bitwig Studio 5</option><option>GarageBand</option></datalist>
+      <label><span data-t="verQ">Versión de Gaux EQ <small>(clic derecho en la pantalla del plugin: la primera línea la dice)</small></span>
+        <input type="text" name="pluginVersion" maxlength="60" placeholder="Gaux EQ 0.26.0 beta"></label>
+      <div class="row">
+        <label><span data-t="srQ">Frecuencia de muestreo</span>
+          <select name="sampleRate"><option value="" data-t="sel">Elige…</option><option>44.1 kHz</option><option>48 kHz</option><option>88.2 kHz</option><option>96 kHz</option><option>192 kHz</option><option data-t="dk">No sé</option></select></label>
+        <label><span data-t="bufQ">Buffer</span>
+          <select name="buffer"><option value="" data-t="sel">Elige…</option><option>32</option><option>64</option><option>128</option><option>256</option><option>512</option><option>1024</option><option>2048</option><option data-t="dk">No sé</option></select></label>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend data-t="lg3">Contacto</legend>
+      <div class="row">
+        <label><span data-t="nameQ">Nombre o nombre artístico</span><input type="text" name="name" maxlength="80"></label>
+        <label><span data-t="mailQ">Correo <small>(para avisarte cuando esté corregido)</small></span><input type="email" name="email" maxlength="120"></label>
+      </div>
+    </fieldset>
+
+    <div class="actions">
+      <button class="primary" type="submit" id="send" data-t="send">ENVIAR REPORTE</button>
+      <button class="ghost" type="button" id="copy" data-t="copy">COPIAR REPORTE</button>
+    </div>
+    <p class="hint" id="hint" data-t="hint">Al enviar se abre tu correo con el reporte listo para mandar a gauxaleksander@gmail.com. Si no se abre, usa “Copiar reporte” y pégalo en un correo o mensaje.</p>
+    <div class="msg" id="msg" role="status" aria-live="polite"></div>
+  </form>
+
+  <footer>© 2026 Aleksander Gaux · Medellín, Colombia</footer>
+</div>
+
+<script>
+// ===== Configuracion =====
+// Correo que recibe los reportes. Si mas adelante se conecta un servicio de formularios (por ejemplo un
+// Cloudflare Worker o Formspree), poner su URL en ENDPOINT y los reportes se enviaran directo, sin abrir el correo.
+const TO = "gauxaleksander@gmail.com";
+const ENDPOINT = "";
+
+const T = {
+  en: { title1:"Gaux EQ", title2:"Tell us how it goes",
+    lead:"Thanks for trying the beta. If something breaks, sounds odd or you have an idea, tell us here: we review every report and turn it into a fix for the final version.",
+    lg1:"What happened", kindQ:"Report type *", k1:"Bug / error", k2:"DAW crashes", k3:"Weird sound", k4:"Installation", k5:"Suggestion", k6:"Love it",
+    whatQ:"What happened? *", whatPh:"E.g.: moving band 3 with the mouse wheel makes a click.", stepsQ:"What were you doing right before? (steps to repeat it)",
+    stepsPh:"1. Loaded the Kick Tech House preset\n2. Switched to LIN phase\n3. ...", repQ:"Does it always happen?", r1:"Always", r2:"Sometimes", r3:"Only once",
+    sevQ:"How serious is it?", s1:"I can't use it", s2:"Annoying but I keep going", s3:"Minor detail", sel:"Choose…",
+    linkQ:"Link to a video or screenshot (optional: Drive, Dropbox, WeTransfer…)", lg2:"Your setup", osQ:"System *", other:"Other", osvQ:"System version",
+    osvPh:"E.g.: macOS 15.1 / Windows 11 24H2", dawQ:"DAW and version *", dawPh:"E.g.: Ableton Live 12.1", fmtQ:"Format", app:"Standalone app", dk:"Not sure",
+    verQ:"Gaux EQ version (right-click the plugin display: the first line shows it)", srQ:"Sample rate", bufQ:"Buffer", lg3:"Contact",
+    nameQ:"Name or artist name", mailQ:"Email (so we can tell you when it's fixed)", send:"SEND REPORT", copy:"COPY REPORT",
+    hint:"Sending opens your email app with the report ready to send to gauxaleksander@gmail.com. If it doesn't open, use “Copy report” and paste it into an email or message.",
+    need:"Fill in the fields marked with * (type, what happened, system and DAW).", copied:"Report copied. Paste it in an email to gauxaleksander@gmail.com or in a DM.",
+    opened:"Your email app should be open with the report. Thanks! If it didn't open, use “Copy report”.", sent:"Report sent. Thank you for helping make Gaux EQ better!",
+    fail:"It couldn't be sent. Use “Copy report” and email it to gauxaleksander@gmail.com." },
+};
+const ES = {}; document.querySelectorAll("[data-t]").forEach(e => ES[e.dataset.t] = e.innerHTML);
+document.querySelectorAll("[data-ph]").forEach(e => ES[e.dataset.ph] = e.placeholder);
+Object.assign(ES, { need:"Completa los campos con * (tipo, qué pasó, sistema y DAW).", copied:"Reporte copiado. Pégalo en un correo a gauxaleksander@gmail.com o por mensaje directo.",
+  opened:"Se debería haber abierto tu correo con el reporte. ¡Gracias! Si no se abrió, usa “Copiar reporte”.", sent:"Reporte enviado. ¡Gracias por ayudar a mejorar Gaux EQ!",
+  fail:"No se pudo enviar. Usa “Copiar reporte” y mándalo a gauxaleksander@gmail.com." });
+let lang = /^en/i.test(navigator.language || "") ? "en" : "es";
+try { const s = localStorage.getItem("gauxFeedbackLang"); if (s === "en" || s === "es") lang = s; } catch (e) {}
+function tr(k) { return (lang === "en" ? T.en[k] : ES[k]) ?? ES[k] ?? k; }
+function applyLang() {
+  document.documentElement.lang = lang;
+  document.querySelectorAll("[data-t]").forEach(e => { const v = lang === "en" ? T.en[e.dataset.t] : ES[e.dataset.t]; if (v != null) { if (lang === "en" && /\*$/.test(v)) e.innerHTML = v.replace(/\s*\*$/, ' <span class="req">*</span>'); else e.innerHTML = v; } });
+  document.querySelectorAll("[data-ph]").forEach(e => { const v = lang === "en" ? T.en[e.dataset.ph] : ES[e.dataset.ph]; if (v != null) e.placeholder = v; });
+  document.querySelectorAll(".lang button").forEach(b => b.classList.toggle("on", b.dataset.lang === lang));
+}
+document.querySelectorAll(".lang button").forEach(b => b.addEventListener("click", () => { lang = b.dataset.lang; try { localStorage.setItem("gauxFeedbackLang", lang); } catch (e) {} applyLang(); }));
+applyLang();
+
+const form = document.getElementById("f"), msg = document.getElementById("msg");
+function data() {
+  const fd = new FormData(form), o = {};
+  for (const [k, v] of fd.entries()) o[k] = String(v).trim();
+  return o;
+}
+function report(o) {
+  const L = [
+    "GAUX EQ BETA - REPORTE",
+    "Tipo: " + (o.kind || "-"),
+    "Que paso: " + (o.what || "-"),
+    "Pasos: " + (o.steps || "-"),
+    "Se repite: " + (o.repeat || "-") + "  |  Gravedad: " + (o.severity || "-"),
+    "Video/captura: " + (o.link || "-"),
+    "",
+    "Sistema: " + (o.os || "-") + " " + (o.osVersion || ""),
+    "DAW: " + (o.daw || "-") + "  |  Formato: " + (o.format || "-"),
+    "Gaux EQ: " + (o.pluginVersion || "-") + "  |  " + (o.sampleRate || "-") + "  |  Buffer " + (o.buffer || "-"),
+    "",
+    "Nombre: " + (o.name || "-") + "  |  Correo: " + (o.email || "-"),
+    "Navegador: " + navigator.userAgent,
+  ];
+  return L.join("\n");
+}
+function valid(o) { return o.kind && o.what && o.os && o.daw; }
+function say(t) { msg.textContent = t; msg.classList.add("show"); }
+
+form.addEventListener("submit", async ev => {
+  ev.preventDefault();
+  const o = data();
+  if (!valid(o)) { say(tr("need")); return; }
+  const subject = "[Gaux EQ beta] " + o.kind + " - " + (o.daw || "") + " - " + (o.os || "");
+  if (ENDPOINT) {
+    const btn = document.getElementById("send"); btn.disabled = true;
+    try {
+      const r = await fetch(ENDPOINT, { method: "POST", headers: { "Content-Type": "application/json", "Accept": "application/json" }, body: JSON.stringify({ subject, ...o, text: report(o) }) });
+      if (!r.ok) throw new Error(r.status);
+      say(tr("sent")); form.reset();
+    } catch (e) { say(tr("fail")); }
+    btn.disabled = false;
+    return;
+  }
+  const body = report(o);
+  const url = "mailto:" + TO + "?subject=" + encodeURIComponent(subject) + "&body=" + encodeURIComponent(body.slice(0, 1800));
+  (window.gauxOpenMail || (u => { location.href = u; }))(url);
+  say(tr("opened"));
+});
+
+document.getElementById("copy").addEventListener("click", async () => {
+  const o = data();
+  if (!valid(o)) { say(tr("need")); return; }
+  const text = report(o);
+  try { await navigator.clipboard.writeText(text); say(tr("copied")); }
+  catch (e) {
+    const ta = document.createElement("textarea"); ta.value = text; document.body.appendChild(ta); ta.select();
+    try { document.execCommand("copy"); say(tr("copied")); } catch (e2) { say(text); }
+    ta.remove();
+  }
+});
+</script>
+</body>
+</html>

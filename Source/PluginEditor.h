@@ -13,6 +13,7 @@
 #include "UI/SidechainPanel.h"
 #include "UI/MatchPanel.h"
 #include "UI/PianoStrip.h"
+#include "UI/UpdateBanner.h"
 
 namespace gaux
 {
@@ -284,6 +285,14 @@ private:
 
     bool vintageView = false, advancedOpen = false;
     int selectedBand = -1;
+
+    // Aviso de version nueva (beta -> final)
+    gaux::UpdateBanner updateBanner;
+    std::unique_ptr<gaux::UpdateChecker> updater;
+public:
+    // (pruebas: mostrar el aviso como si hubiera llegado una version nueva)
+    void showUpdateForTests (const gaux::UpdateInfo& u) { updateBanner.show (u); resized(); }
+private:
     juce::Rectangle<float> logoArea;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MainView)
@@ -304,6 +313,7 @@ public:
     gaux::Mascot& getMascot() { return view.getMascot(); }
     void setUiScale (float s);
     float getUiScale() const { return uiScale; }
+    void showUpdateForTests (const gaux::UpdateInfo& u) { view.showUpdateForTests (u); }
 
 private:
     void designSizeChanged();

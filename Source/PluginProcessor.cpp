@@ -977,7 +977,8 @@ void GauxEqProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::Midi
             for (int ch = 0; ch < numChannels; ++ch)
             {
                 float* d = buf.getWritePointer (ch);
-                d[i] += b * (dryDelay.getSample (ch, idx) - d[i]);
+                // (con el bypass del todo puesto sale la senal original exacta, bit a bit)
+                d[i] = b >= 1.0f ? dryDelay.getSample (ch, idx) : d[i] + b * (dryDelay.getSample (ch, idx) - d[i]);
             }
         }
     }

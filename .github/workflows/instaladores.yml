@@ -7,7 +7,7 @@ on:
   push:
     branches: [main]
     tags: ['v*']
-    paths-ignore: ['README.md']
+    paths-ignore: ['README.md', 'update/**']
   workflow_dispatch:
 
 permissions:
@@ -41,13 +41,22 @@ jobs:
           msg=$( (grep -E "error:|Error|ERROR|FAILED" build.log | head -20; echo "----- final del registro -----"; tail -n 30 build.log) | cut -c1-400 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
           echo "::error title=Errores de Mac::$msg"
 
-      - name: Instalar el .pkg (como lo haria un usuario)
+      # Como un usuario que ya tenia la version anterior: bajar el zip publicado (el mismo link que se comparte),
+      # revisarlo e instalarlo; despues se instala la version nueva ENCIMA (prueba de actualizacion)
+      - name: Descargar e instalar la version publicada (antes de actualizar)
+        run: bash .github/scripts/mac_install_tests.sh descarga
+
+      - name: Revisar el zip nuevo
+        run: bash .github/scripts/mac_install_tests.sh nuevo "$(ls dist/*.zip | head -1)"
+
+      - name: Instalar el .pkg nuevo encima (como lo haria un usuario)
         run: |
           sudo installer -pkg "$(ls dist/*/Gaux\ Equalizer.pkg)" -target /
           ls -la "/Library/Audio/Plug-Ins/VST3/" "/Library/Audio/Plug-Ins/Components/"
           killall -9 AudioComponentRegistrar 2>/dev/null || true
           sleep 3
           auval -v aufx Gxeq Gaux
+          bash .github/scripts/mac_install_tests.sh actualizado "$(sed -n 's/^project(GauxEqualizer VERSION \([0-9.]*\)).*/\1/p' CMakeLists.txt)"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -64,6 +73,9 @@ jobs:
           unzip -q pluginval.zip
           bash .github/scripts/pluginval_mac.sh "/Library/Audio/Plug-Ins/VST3/Gaux Equalizer.vst3" vst3 --strictness-level 10 --skip-gui-tests --timeout-ms 300000 --sample-rates 44100,96000 --block-sizes 64,1024
           bash .github/scripts/pluginval_mac.sh "/Library/Audio/Plug-Ins/Components/Gaux Equalizer.component" au --strictness-level 10 --skip-gui-tests --timeout-ms 300000 --sample-rates 48000 --block-sizes 512
+
+      - name: Desinstalar (sin restos, presets intactos) y volver a instalar
+        run: bash .github/scripts/mac_install_tests.sh desinstalar "$(ls dist/*/Gaux\ Equalizer.pkg)"
 
       # El ultimo instalador validado queda tambien en la rama "instalador-mac" (un solo commit, se reemplaza
       # cada vez): asi se puede bajar con un link directo, sin entrar a GitHub
@@ -117,8 +129,8 @@ jobs:
         shell: pwsh
         run: |
           $setup = (Get-ChildItem -Recurse -Filter *_Windows_Setup.exe dist | Select-Object -First 1).FullName
-          Start-Process -Wait -FilePath $setup -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/SP-'
-          if (-not (Test-Path "$env:CommonProgramFiles\VST3\Gaux Equalizer.vst3\Contents\x86_64-win\Gaux Equalizer.vst3")) { throw 'El instalador no dejo el VST3 en su lugar' }
+          powershell -NoProfile -ExecutionPolicy Bypass -File .github/scripts/win_install_tests.ps1 -Phase instalar -Setup $setup
+          if ($LASTEXITCODE) { exit 1 }
 
       - name: Validar con pluginval, nivel maximo (VST3)
         shell: pwsh
@@ -143,10 +155,9 @@ jobs:
       - name: Desinstalar (comprobar que no deja restos)
         shell: pwsh
         run: |
-          $u = Get-ChildItem "${env:ProgramFiles}\Gaux\Gaux Equalizer\unins*.exe" | Select-Object -First 1
-          Start-Process -Wait -FilePath $u.FullName -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART'
-          Start-Sleep -Seconds 3
-          if (Test-Path "$env:CommonProgramFiles\VST3\Gaux Equalizer.vst3") { throw 'El desinstalador dejo el VST3' }
+          $setup = (Get-ChildItem -Recurse -Filter *_Windows_Setup.exe dist | Select-Object -First 1).FullName
+          powershell -NoProfile -ExecutionPolicy Bypass -File .github/scripts/win_install_tests.ps1 -Phase desinstalar -Setup $setup
+          if ($LASTEXITCODE) { exit 1 }
 
       - uses: actions/upload-artifact@v4
         with:

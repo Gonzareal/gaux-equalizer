@@ -9,6 +9,16 @@ MainView::MainView (GauxEqProcessor& p)
     setLookAndFeel (&lnf);
 
     modeSwitch.onChange = [this] (int m) { setMode (m); };
+
+    // Aviso de version nueva: se busca en segundo plano al abrir la ventana (nunca en el audio, nunca envia datos)
+    addChildComponent (updateBanner);
+    updateBanner.onSkip = [this] (const juce::String& v) { if (updater) updater->skip (v); };
+    if (juce::SystemStats::getEnvironmentVariable ("GAUX_NO_UPDATE_CHECK", {}).isEmpty())
+    {
+        updater = std::make_unique<gaux::UpdateChecker> (JucePlugin_VersionString);
+        updater->onUpdateAvailable = [this] (const gaux::UpdateInfo& u) { updateBanner.show (u); resized(); };
+        updater->start();
+    }
     addAndMakeVisible (modeSwitch);
 
     power.onClick = [this] { setParamValue (proc.apvts, ParamID::bypass, proc.params.bypass->load() > 0.5f ? 0.0f : 1.0f); };
@@ -528,6 +538,8 @@ void MainView::resized()
     const bool drawer = vintageView && advancedOpen;
     faceplate.setBounds (0, kHeaderH, kWidth, (drawer ? drawerTop() : kHeight) - kHeaderH);
     drawerDisplay.setBounds (juce::Rectangle<int> (0, drawerTop(), kWidth, kDrawerH).reduced (54, 22).translated (0, -2));
+    updateBanner.setBounds (juce::Rectangle<int> (0, kHeaderH + 10, kWidth, 40).withSizeKeepingCentre (560, 40));
+    if (updateBanner.isVisible()) updateBanner.toFront (false);
 }
 
 //==============================================================================

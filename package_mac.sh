@@ -39,8 +39,10 @@ for p in "$VST3" "$AU" "$APP"; do
 done
 
 # 3) Un paquete por formato (cada uno instala en su carpeta del sistema)
-chmod +x packaging/mac/scripts/postinstall
-rm -rf "$WORK"; mkdir -p "$WORK"
+rm -rf "$WORK"; mkdir -p "$WORK/scripts"
+cp packaging/mac/scripts/postinstall "$WORK/scripts/"
+cp "packaging/mac/Desinstalar Gaux Equalizer.command" "$WORK/scripts/uninstall.command"
+chmod +x "$WORK/scripts/postinstall" "$WORK/scripts/uninstall.command"
 make_component () {   # id  bundle  destino  nombre.pkg  [scripts]
     local id="$1" src="$2" dest="$3" pkg="$4" scripts="${5:-}"
     local root="$WORK/root-$id"
@@ -63,8 +65,8 @@ make_component () {   # id  bundle  destino  nombre.pkg  [scripts]
                  --install-location "/" "$WORK/$pkg"
     fi
 }
-make_component com.gaux.equalizer.vst3 "$VST3" "/Library/Audio/Plug-Ins/VST3" vst3.pkg packaging/mac/scripts
-make_component com.gaux.equalizer.au   "$AU"   "/Library/Audio/Plug-Ins/Components" au.pkg packaging/mac/scripts
+make_component com.gaux.equalizer.vst3 "$VST3" "/Library/Audio/Plug-Ins/VST3" vst3.pkg "$WORK/scripts"
+make_component com.gaux.equalizer.au   "$AU"   "/Library/Audio/Plug-Ins/Components" au.pkg "$WORK/scripts"
 make_component com.gaux.equalizer.app  "$APP"  "/Applications" app.pkg
 
 # Arquitecturas que el instalador acepta (segun lo compilado)
@@ -78,6 +80,7 @@ productbuild --distribution "$WORK/distribution.xml" --resources packaging/mac -
 cp "packaging/ANTES DE INSTALAR - Mac.txt" "$DIST/"
 cp packaging/LICENCIA.txt "$DIST/"
 cp "packaging/Guia de Gaux Equalizer.pdf" "$DIST/"
+cp "packaging/mac/Desinstalar Gaux Equalizer.command" "$DIST/" && chmod +x "$DIST/Desinstalar Gaux Equalizer.command"
 curl -fsSL --max-time 20 https://www.gnu.org/licenses/agpl-3.0.txt -o "$DIST/AGPLv3.txt" 2>/dev/null || rm -f "$DIST/AGPLv3.txt"
 if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     git archive --format=zip --prefix=GauxEQ/ -o "$DIST/GauxEQ_codigo_fuente.zip" HEAD

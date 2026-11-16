@@ -929,7 +929,7 @@ static int run (const juce::String& outDir, const juce::String& musicFile)
         setP (p, ParamID::vLowAtten, (float) (4 * ease ((t - 2.6) / 1.0)));
         setP (p, ParamID::vHighBoost, (float) (6 * ease ((t - 4.3) / 1.0)));
         setP (p, ParamID::vHighAtten, (float) (4 * ease ((t - 6.0) / 0.8)));
-        setP (p, ParamID::output, (float) (-4.0 * lb));   // compensa el nivel para no saturar la salida
+        setP (p, ParamID::output, (float) (-3.2 * lb));   // compensa el nivel: el A/B con / sin Vintage queda al mismo volumen percibido (medido en LUFS)
         const bool off = t >= 7.9 && t < 8.9;
         setP (p, ParamID::bypass, off ? 1.0f : 0.0f);
         if (t < 0.7)      { chip = -1; label = "Vintage GX-1 en cero: no colorea"; value = "todas las perillas en 0"; }
@@ -975,6 +975,18 @@ int main (int argc, char** argv)
     const juce::String outDir = argc > 1 ? argv[1] : ".";
     if (argc > 2 && juce::String (argv[2]) == "auditoria") return audit::run (outDir) == 0 ? 0 : 1;
     if (argc > 2 && juce::String (argv[2]) == "guia") return guide::run (outDir);
+    if (argc > 2 && juce::String (argv[2]) == "aviso")
+    {
+        // el aviso de version nueva tal como lo veria alguien con la beta
+        GauxEqProcessor p; p.prepareToPlay (48000.0, 512);
+        std::unique_ptr<GauxEqEditor> ed (dynamic_cast<GauxEqEditor*> (p.createEditor()));
+        ed->setUiScale (1.0f);
+        gaux::UpdateInfo u; u.version = "1.0.0"; u.channel = "final"; u.title = "Gaux Equalizer 1.0: la version final"; u.url = "https://aleksandergaux.com";
+        ed->showUpdateForTests (u);
+        for (int i = 0; i < 5; ++i) juce::MessageManager::getInstance()->runDispatchLoopUntil (20);
+        snapshot (*ed, outDir + "/aviso_version.png");
+        return 0;
+    }
     if (argc > 3 && juce::String (argv[2]) == "video") return video::run (outDir, argv[3]);
     if (argc > 3 && juce::String (argv[2]) == "video2") return video2::run (outDir, argv[3]);
     if (argc > 2 && juce::String (argv[2]) == "fps")

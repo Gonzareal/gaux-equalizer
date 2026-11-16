@@ -15,7 +15,7 @@ static juce::String fmtFreq (double f)
 #ifdef JucePlugin_VersionString
  #define GAUX_VERSION_STR JucePlugin_VersionString
 #else
- #define GAUX_VERSION_STR "0.25.0"
+ #define GAUX_VERSION_STR "0.26.0"
 #endif
 
 static juce::Path linePath (const std::vector<juce::Point<float>>& pts)
@@ -1292,7 +1292,7 @@ void SpectrumDisplay::mouseDown (const juce::MouseEvent& e)
             // Clic derecho en la pantalla vacia: opciones de la pantalla
             juce::PopupMenu m, an, rg;
             // Para saber con certeza que version esta cargada en el DAW
-            m.addSectionHeader (juce::String ("Gaux EQ ") + GAUX_VERSION_STR + "  -  compilado " + __DATE__ + " " + juce::String (__TIME__).substring (0, 5) + " UTC");
+            m.addSectionHeader (juce::String ("Gaux EQ ") + GAUX_VERSION_STR + " beta  -  compilado " + __DATE__ + " " + juce::String (__TIME__).substring (0, 5) + " UTC");
             const auto o = viewOptions();
             an.addSectionHeader ("Velocidad");
             an.addItem (10, "Lenta (promedia mas)", true, o.speed == 0);

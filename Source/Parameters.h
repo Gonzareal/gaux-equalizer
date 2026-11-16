@@ -77,17 +77,23 @@ inline juce::StringArray toStringArray (const char* const* names, int n)
     return a;
 }
 
+// Frecuencia: escala logaritmica de verdad (cada octava ocupa lo mismo en la perilla y en la automatizacion del
+// DAW, como en las consolas y en Pro-Q). Antes era una curva de potencia con centro en 632 Hz: el primer 20 % de
+// una automatizacion recorria solo 20 a 26 Hz, y un valor guardado como "20.0" podia volver 1 % corrido.
 inline juce::NormalisableRange<float> freqRange()
 {
-    juce::NormalisableRange<float> r (20.0f, 20000.0f);
-    r.setSkewForCentre (632.0f); // centro geometrico 20..20k
-    return r;
+    return juce::NormalisableRange<float> (20.0f, 20000.0f,
+        [] (float lo, float hi, float n) { return lo * std::pow (hi / lo, juce::jlimit (0.0f, 1.0f, n)); },
+        [] (float lo, float hi, float v) { return juce::jlimit (0.0f, 1.0f, std::log (juce::jmax (lo, v) / lo) / std::log (hi / lo)); },
+        [] (float lo, float hi, float v) { return juce::jlimit (lo, hi, v); });
 }
 
 inline juce::String formatFreq (float hz, int = 0)
 {
-    return hz >= 1000.0f ? juce::String (hz / 1000.0f, hz >= 10000.0f ? 1 : 2) + " kHz"
-                         : juce::String (juce::roundToInt (hz)) + " Hz";
+    // (los limites se deciden con el valor ya redondeado: 9999.99 Hz se muestra "10.0 kHz" y, al escribirlo de
+    //  vuelta, da el mismo texto; antes salia "10.00 kHz" y no coincidia)
+    return hz >= 999.5f ? juce::String (hz / 1000.0f, hz >= 9995.0f ? 1 : 2) + " kHz"
+                        : juce::String (juce::roundToInt (hz)) + " Hz";
 }
 
 // Se puede escribir "2500", "2.5k", "2k5", "2.5 kHz" o una NOTA: "A4" (440 Hz), "C#2", "Eb1"...

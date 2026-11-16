@@ -2,6 +2,14 @@
 
 EQ para producción de música electrónica, desde la mezcla de cada instrumento hasta el mastering. Dos caras:
 
+## Novedades v0.26 BETA (estrés máximo, instalación probada y aviso de versión nueva)
+- **Más de 1.900 pruebas nuevas**: 200 configuraciones al azar de todas las perillas (sonido, silencio, guardar/abrir, determinismo, bypass), texto de cada parámetro, señales hostiles, proyectos dañados, DAWs raros, CPU en el peor caso, aviso de versión y lo que prometen los videos.
+- **Frecuencia en escala logarítmica real**: cada octava ocupa lo mismo en la perilla y en la automatización del DAW (antes el primer 20 % solo recorría de 20 a 26 Hz). El sonido no cambia: 260 ajustes comparados contra la v0.25 suenan idéntico.
+- **Bypass exacto**: con el plugin apagado sale la señal original bit a bit.
+- **Aviso de versión nueva**: al abrir la ventana, como mucho una vez al día, lee `update/latest.json`. Si hay una versión más nueva muestra DESCARGAR / MÁS TARDE / omitir. No envía datos ni instala nada solo.
+- **Desinstalador para Mac** (en el zip y en /Library/Application Support/Gaux Equalizer). GitHub Actions ahora prueba descargar el zip publicado, instalarlo, actualizar encima, desinstalar sin restos (presets intactos) y reinstalar, en Mac y Windows.
+- **Guía rápida** de 8 páginas y formulario de feedback de la beta (`packaging/beta/beta-feedback.html`).
+
 ## Novedades v0.25 (310 pruebas de sesiones reales)
 - **AUTO GAIN como un medidor de LUFS**: ahora calcula el cambio de volumen con la ponderación K de los medidores de loudness y el reparto típico de una mezcla (80 % centro, 20 % lados). Con los 40 presets queda a ±0.3 LU del volumen original (antes hasta 1.5 LU de diferencia en presets con realce de agudos, cortes de graves o bandas en Side).
 - **310 pruebas nuevas de sesiones reales**, sobre una canción con bombo, snare, hats, bajo, pad, lead y voz:

@@ -2,7 +2,7 @@
   GAUX EQUALIZER  -  LEE ESTO ANTES DE INSTALAR (Windows)
 ==============================================================
 
-Gracias por probar Gaux Equalizer, un EQ gratuito hecho por
+Gracias por probar la BETA de Gaux Equalizer, un EQ gratuito hecho por
 Aleksander Gaux para productores.
 
 En este mismo paquete está la GUÍA DE USUARIO ("Guia de Gaux Equalizer.pdf"):

@@ -5,5 +5,12 @@ for p in "/Library/Audio/Plug-Ins/VST3/Gaux Equalizer.vst3" \
          "/Applications/Gaux Equalizer.app"; do
     [ -e "$p" ] && xattr -dr com.apple.quarantine "$p" 2>/dev/null
 done
+# Dejar el desinstalador a mano: /Library/Application Support/Gaux Equalizer
+SUP="/Library/Application Support/Gaux Equalizer"
+if [ -f "$(dirname "$0")/uninstall.command" ]; then
+    mkdir -p "$SUP"
+    cp "$(dirname "$0")/uninstall.command" "$SUP/Desinstalar Gaux Equalizer.command"
+    chmod 755 "$SUP/Desinstalar Gaux Equalizer.command"
+fi
 killall -9 AudioComponentRegistrar >/dev/null 2>&1
 exit 0

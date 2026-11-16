@@ -1,6 +1,10 @@
 # Prueba interna: renderiza la interfaz a PNG y procesa audio sin DAW (solo Linux/CI)
 cmake_minimum_required(VERSION 3.22)
 project(GauxRenderTest VERSION 0.1.0)
+# la misma version que el plugin (para el aviso de version nueva y el menu "acerca de")
+file(READ ${CMAKE_CURRENT_LIST_DIR}/../../CMakeLists.txt _gaux_root)
+string(REGEX MATCH "project\\(GauxEqualizer VERSION ([0-9.]+)\\)" _gaux_m "${_gaux_root}")
+set(GAUX_VER "${CMAKE_MATCH_1}")
 add_subdirectory(${JUCE_DIR} JUCE)
 juce_add_console_app(GauxRenderTest PRODUCT_NAME "GauxRenderTest")
 target_sources(GauxRenderTest PRIVATE
@@ -12,7 +16,7 @@ target_sources(GauxRenderTest PRIVATE
     ../../Source/UI/SpectrumDisplay.cpp)
 target_include_directories(GauxRenderTest PRIVATE ../../Source ${XSTUB_DIR})
 target_compile_definitions(GauxRenderTest PRIVATE PFFFT_STATIC_DEFINE=1 JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0
-    JucePlugin_Name="Gaux Equalizer" JUCE_STANDALONE_APPLICATION=1 JUCE_MODAL_LOOPS_PERMITTED=1)
+    JucePlugin_Name="Gaux Equalizer" JucePlugin_VersionString="${GAUX_VER}" JUCE_STANDALONE_APPLICATION=1 JUCE_MODAL_LOOPS_PERMITTED=1)
 juce_add_binary_data(GauxFonts SOURCES
     ../../Resources/Fonts/SpaceGrotesk-Regular.ttf
     ../../Resources/Fonts/SpaceGrotesk-SemiBold.ttf
@@ -34,6 +38,6 @@ target_sources(GauxMixLab PRIVATE
     ../../Source/UI/SpectrumDisplay.cpp)
 target_include_directories(GauxMixLab PRIVATE ../../Source ${XSTUB_DIR})
 target_compile_definitions(GauxMixLab PRIVATE PFFFT_STATIC_DEFINE=1 JUCE_WEB_BROWSER=0 JUCE_USE_CURL=0
-    JucePlugin_Name="Gaux Equalizer" JUCE_STANDALONE_APPLICATION=1 JUCE_MODAL_LOOPS_PERMITTED=1)
+    JucePlugin_Name="Gaux Equalizer" JucePlugin_VersionString="${GAUX_VER}" JUCE_STANDALONE_APPLICATION=1 JUCE_MODAL_LOOPS_PERMITTED=1)
 target_link_libraries(GauxMixLab PRIVATE GauxFonts juce::juce_gui_basics juce::juce_gui_extra
     juce::juce_audio_processors juce::juce_dsp juce::juce_recommended_config_flags)

@@ -2,7 +2,7 @@
   GAUX EQUALIZER  -  LEE ESTO ANTES DE INSTALAR (Mac)
 ==============================================================
 
-Gracias por probar Gaux Equalizer, un EQ gratuito hecho por
+Gracias por probar la BETA de Gaux Equalizer, un EQ gratuito hecho por
 Aleksander Gaux para productores.
 
 En este mismo paquete está la GUÍA DE USUARIO ("Guia de Gaux Equalizer.pdf"):
@@ -65,8 +65,11 @@ Apple. Se permite UNA vez y listo.
 - Tus presets: carpeta Música > Gaux EQ > Presets.
 - Actualizar: instala la versión nueva encima. Tus presets se
   conservan.
-- Desinstalar: borra los tres archivos de arriba (en el Finder:
-  Ir > Ir a la carpeta... y pega la ruta).
+- Desinstalar: doble clic en "Desinstalar Gaux Equalizer.command"
+  (viene en este zip y queda también en /Library/Application
+  Support/Gaux Equalizer). Si el Mac lo bloquea: clic derecho >
+  Abrir > Abrir. Te pide la contraseña y borra el VST3, el AU y
+  la app. Tus presets NO se borran.
 
 --------------------------------------------------------------
  LICENCIA
